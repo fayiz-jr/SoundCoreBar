@@ -20,6 +20,8 @@ public final class SoundcoreConnection: NSObject {
         /// The headphones answered in a layout this app does not know; it will not send them anything.
         case unsupported(String)
         case failed(String)
+        /// The setup assistant is learning the headphones; see `beginLearning()`.
+        case settingUp
     }
 
     public let device: IOBluetoothDevice
@@ -72,7 +74,11 @@ public final class SoundcoreConnection: NSObject {
     private var attempts = 0
     private var awaitingSDP = false
     private var isClosed = false
-    private let models: [HeadphoneModel]
+    private var models: [HeadphoneModel]
+    /// Set while the setup assistant has the channel.
+    public private(set) var isLearning = false
+    /// While learning, receives every state reply and change notice.
+    public var onLearningPacket: ((Packet) -> Void)?
     private let log = Logger(subsystem: "com.fayizjr.SoundcoreBar", category: "connection")
 
     /// `models` are the models the headphones may turn out to be.
@@ -88,7 +94,7 @@ public final class SoundcoreConnection: NSObject {
         guard !isClosed, channel == nil else { return }
         attempts += 1
         // A background retry keeps showing the failure until it succeeds.
-        if !isFailed { status = .connecting }
+        if !isFailed { status = connectingStatus }
         if let service = SoundcoreServiceUUID.preferredService(in: device.rfcommServices) {
             open(service)
         } else if !awaitingSDP {
@@ -111,16 +117,34 @@ public final class SoundcoreConnection: NSObject {
     /// Starts over at once instead of waiting for the next background retry.
     public func retryNow() {
         guard !isClosed, isFailed else { return }
-        reopenTask?.cancel()
-        tearDownChannel()
-        attempts = 0
-        status = .connecting
-        start()
+        restart()
     }
 
     private var isFailed: Bool {
         if case .failed = status { return true }
         return false
+    }
+
+    private var connectingStatus: Status { isLearning ? .settingUp : .connecting }
+
+    /// Starts over with another list of models: headphones not recognised before may be now, and
+    /// headphones whose model was removed are not any more.
+    public func useModels(_ models: [HeadphoneModel]) {
+        self.models = models
+        guard !isClosed, !isLearning else { return }
+        let modelRemoved = model.map { !models.contains($0) } ?? false
+        guard modelRemoved || unrecognizedState != nil else { return }
+        restart()
+    }
+
+    private func restart() {
+        reopenTask?.cancel()
+        tearDownChannel()
+        model = nil
+        unrecognizedState = nil
+        attempts = 0
+        status = connectingStatus
+        start()
     }
 
     /// Switches the ambient sound mode. The checkmark moves once the headphones acknowledge, and
@@ -201,7 +225,7 @@ public final class SoundcoreConnection: NSObject {
         let wait: Duration
         if attempts < Self.quickAttempts {
             log.notice("\(self.name, privacy: .public): \(reason, privacy: .public); retrying")
-            if !isFailed { status = .connecting }
+            if !isFailed { status = connectingStatus }
             wait = .seconds(2)
         } else {
             if !isFailed {
@@ -265,7 +289,8 @@ public final class SoundcoreConnection: NSObject {
         guard settleTask != nil else { return }
         settleTask?.cancel()
         settleTask = nil
-        if confirm {
+        // The setup assistant reads the state itself.
+        if confirm, !isLearning {
             requestState()
         } else {
             sendNextRequest()
@@ -305,6 +330,14 @@ public final class SoundcoreConnection: NSObject {
     }
 
     private func handle(_ packet: Packet) {
+        if isLearning {
+            if packet.command == .state || packet.command == .soundModesChanged {
+                onLearningPacket?(packet)
+            }
+            if packet.command == .soundModesChanged { endSettling(confirm: false) }
+            if packet.command == inFlight?.reply { finishInFlight(with: packet) }
+            return
+        }
         switch packet.command {
         case .state:
             receivedState(packet.body)
@@ -354,6 +387,45 @@ public final class SoundcoreConnection: NSObject {
         guard let modes else { return }
         soundModes = modes
         status = .ready(modes.ambient)
+    }
+}
+
+// MARK: - Setting up unknown headphones
+
+extension SoundcoreConnection {
+    /// Hands the channel to the setup assistant: state replies and change notices go to
+    /// `onLearningPacket` instead of being matched to a model, and nothing is sent but what the
+    /// assistant asks for.
+    public func beginLearning() {
+        guard !isClosed, !isLearning else { return }
+        isLearning = true
+        restart()
+    }
+
+    /// Reads the state; the reply reaches `onLearningPacket` before `completion` runs.
+    public func learningReadState(completion: @escaping (Bool) -> Void) {
+        guard isLearning else { return completion(false) }
+        send(.requestState, expecting: .state) { completion($0 != nil) }
+    }
+
+    /// Sends a sound-modes block. As after any switch, nothing else is sent until the headphones
+    /// report the change or `settleTimeout` passes, so a state read asked for now comes after that.
+    public func learningSendSoundModes(_ block: [UInt8], completion: @escaping (Bool) -> Void) {
+        guard isLearning else { return completion(false) }
+        send(Packet(.outbound, .setSoundModes, body: block), expecting: .setSoundModes) { [weak self] reply in
+            if reply != nil { self?.beginSettling() }
+            completion(reply != nil)
+        }
+    }
+
+    /// Gives the channel back. With a model, the headphones are recognised again from a fresh state
+    /// reply; without one, they are left alone as before.
+    public func endLearning(adding learned: HeadphoneModel?) {
+        guard isLearning else { return }
+        isLearning = false
+        onLearningPacket = nil
+        if let learned, !models.contains(learned) { models.append(learned) }
+        restart()
     }
 }
 

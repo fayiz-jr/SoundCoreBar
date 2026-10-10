@@ -51,9 +51,9 @@ SoundcoreBar recognises the model from the serial number in the headphones’ re
 headphones work too. The older Liberty 2 Pro+, Liberty Air 2 Pro, Life Dot 2 NC, Life A2 NC,
 Life Note 3, Life P3 and Vortex have no serial number there; they are recognised by their
 Bluetooth name, so keep the model in it if you rename them. Soundcore devices that match no known
-model show as not supported and are sent nothing more. Models without noise control (such as the
-plain R50i or the A20i) have nothing to switch. To add another model, see
-[Adding your headphones](#adding-your-headphones).
+model show as not supported and are sent nothing more; the setup assistant can learn them (see
+[Adding your headphones](#adding-your-headphones)). Models without noise control (such as the
+plain R50i or the A20i) have nothing to switch.
 
 ## Install
 
@@ -106,6 +106,9 @@ Ad-hoc builds are signed with a designated requirement that matches the bundle i
 macOS keeps the Bluetooth permission across rebuilds. To sign with your own certificate instead:
 `SIGN_IDENTITY="Apple Development" scripts/build-app.sh`.
 
+To try the setup assistant on headphones SoundcoreBar already knows, start it with only the learned
+models: `open build/SoundcoreBar.app --args -SetUpKnownHeadphones YES`.
+
 There are no SwiftUI previews without Xcode, so `PanelPreview` stands in:
 
 ```bash
@@ -120,6 +123,23 @@ To watch the packets while you use the app:
 ```
 
 ## Adding your headphones
+
+If SoundcoreBar doesn’t know your Soundcore headphones, the panel shows **Set Up…** next to them.
+The setup assistant learns them in about a minute:
+
+1. You switch the headphones through their modes with their own button, and SoundcoreBar reads
+   their settings after each one.
+2. It finds the byte that follows the mode, and the length of the settings block from the notice
+   the button sends.
+3. It switches once, checks that the headphones report the new mode and that nothing else changed,
+   asks whether you heard it, and switches back.
+
+Until that test it only reads from the headphones, and it sends nothing if anything looks wrong.
+The result is saved on your Mac and marked **Learned** in the panel; click the badge to forget it.
+The assistant ends with a report to paste into a [GitHub issue](../../issues), so the model can
+be added for everyone. It leaves out the serial number and Bluetooth address.
+
+### For developers
 
 `SoundcoreProbe` is the tool used to work out each model. It runs as its own app, with its own
 Bluetooth permission.
@@ -147,7 +167,8 @@ switch, it sends back the last sound-modes block the headphones reported with on
 changed, resends up to three times without an acknowledgement, and then sends nothing else until
 the headphones report the change or two seconds pass.
 
-- `SoundcoreKit`: packet framing, stream reassembly, the model table and recognition. No Bluetooth.
+- `SoundcoreKit`: packet framing, stream reassembly, the model table, recognition and the setup
+  assistant’s analysis (`ModelLearner`). No Bluetooth.
 - `SoundcoreBluetooth`: SDP lookup, the RFCOMM connection and connect/disconnect monitoring, all on
   the main thread, where IOBluetooth delivers its callbacks.
 - `SoundcoreBarUI` and `SoundcoreBar`: the glass panel and the app.

@@ -12,7 +12,7 @@ public enum FormFactor: String, Codable, Sendable {
 /// data: the built-in ones (`HeadphoneModels.builtIn`) come from OpenSCQ30's research.
 public struct HeadphoneModel: Codable, Hashable, Sendable, Identifiable {
     /// Model numbers that share this layout, e.g. ["A3959"]. Their serial numbers start with the
-    /// model number's digits ("3959…").
+    /// model number's digits ("3959…"). Headphones set up by hand have just those digits.
     public var modelNumbers: [String]
     public var name: String
     /// How the model appears in Bluetooth names, e.g. "Life Note 3". Models without a serial number
@@ -49,7 +49,7 @@ public struct HeadphoneModel: Codable, Hashable, Sendable, Identifiable {
         self.verified = verified
     }
 
-    public var id: String { modelNumbers.joined(separator: "/") }
+    public var id: String { modelNumbers.isEmpty ? name : modelNumbers.joined(separator: "/") }
 
     public var soundModesRange: Range<Int> { soundModesOffset..<(soundModesOffset + soundModesLength) }
 
@@ -59,7 +59,7 @@ public struct HeadphoneModel: Codable, Hashable, Sendable, Identifiable {
         guard let serialOffset else { return nil }
         guard state.count >= serialOffset + 4 else { return false }
         let prefix = String(decoding: state[serialOffset..<(serialOffset + 4)], as: UTF8.self)
-        return modelNumbers.contains { $0.dropFirst().prefix(4) == prefix }
+        return modelNumbers.contains { $0.drop(while: \.isLetter).prefix(4) == prefix }
     }
 
     /// Whether a Bluetooth name contains one of the keywords as whole words, so "Life Note 3" is
@@ -74,8 +74,8 @@ public struct HeadphoneModel: Codable, Hashable, Sendable, Identifiable {
         guard state.count >= soundModesRange.upperBound, serialMatches(state) != false,
               let modes = SoundModes(Array(state[soundModesRange]), extraModes: Set(extraModes))
         else { return nil }
-        // Without a serial number to confirm the layout, the block itself has to look right.
-        if serialOffset == nil, !Self.isPlausibleFourByteBlock(modes.bytes) { return nil }
+        // Without a serial number to confirm the layout, OpenSCQ30's 4-byte block has to look right.
+        if serialOffset == nil, modes.bytes.count == 4, !Self.isPlausibleFourByteBlock(modes.bytes) { return nil }
         return modes
     }
 

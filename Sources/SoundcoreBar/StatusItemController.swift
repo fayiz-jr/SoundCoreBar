@@ -14,8 +14,12 @@ final class StatusItemController: NSObject {
     private var shownIcon: MenuBarIcon?
 
     init(model: HeadphonesModel) {
-        panel = GlassPanel(width: PanelView.width, content: AnyView(PanelContent(model: model, state: PanelState())))
+        var closePanel: () -> Void = {}
+        panel = GlassPanel(width: PanelView.width, content: AnyView(PanelContent(
+            model: model, state: PanelState(), closePanel: { closePanel() }
+        )))
         super.init()
+        closePanel = { [weak self] in self?.panel.close() }
         if let button = statusItem.button {
             button.target = self
             button.action = #selector(togglePanel)
@@ -68,6 +72,7 @@ final class PanelState: ObservableObject {
 private struct PanelContent: View {
     @ObservedObject var model: HeadphonesModel
     @ObservedObject var state: PanelState
+    let closePanel: () -> Void
 
     var body: some View {
         PanelView(
@@ -76,6 +81,11 @@ private struct PanelContent: View {
             showsIconPicker: $state.showsIconPicker,
             onSelect: { id, mode in model.select(mode, for: id) },
             onRetry: { model.retry($0) },
+            onSetUp: { id in
+                closePanel()
+                model.setUp(id)
+            },
+            onForget: { model.forget($0) },
             onOpenBluetoothSettings: {
                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth") {
                     NSWorkspace.shared.open(url)

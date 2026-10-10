@@ -4,8 +4,6 @@
 import Testing
 @testable import SoundcoreKit
 
-private func hex(_ text: String) -> [UInt8] { bytes(fromHex: text)! }
-
 @Suite struct PacketTests {
     @Test func requestStateMatchesKnownBytes() {
         #expect(Packet.requestState.encoded() == bytes(fromHex: "08 ee 00 00 00 01 01 0a 00 02"))

@@ -12,23 +12,31 @@ public struct HeadphonesItem: Identifiable, Equatable {
         case ready(AmbientSoundMode?)
         /// Connected but not reachable for now; the message says why, and trying again may help.
         case problem(String)
-        /// Headphones this app does not know how to control.
+        /// Headphones this app does not know how to control; the setup assistant can learn them.
         case unsupported(String)
+        /// The setup assistant is learning them.
+        case settingUp
+    }
+
+    public enum Badge: Equatable {
+        /// A model that has not been tried on real headphones yet.
+        case beta
+        /// A model learned by the setup assistant.
+        case learned
     }
 
     public let id: String
     public let name: String
     /// Nil until the model is known.
     public let formFactor: FormFactor?
-    /// A model that has not been tested on real headphones yet.
-    public let isBeta: Bool
+    public let badge: Badge?
     public let state: State
 
-    public init(id: String, name: String, formFactor: FormFactor?, isBeta: Bool = false, state: State) {
+    public init(id: String, name: String, formFactor: FormFactor?, badge: Badge? = nil, state: State) {
         self.id = id
         self.name = name
         self.formFactor = formFactor
-        self.isBeta = isBeta
+        self.badge = badge
         self.state = state
     }
 }
@@ -40,6 +48,8 @@ public struct PanelView: View {
     let bluetoothDenied: Bool
     let onSelect: (HeadphonesItem.ID, AmbientSoundMode) -> Void
     let onRetry: (HeadphonesItem.ID) -> Void
+    let onSetUp: (HeadphonesItem.ID) -> Void
+    let onForget: (HeadphonesItem.ID) -> Void
     let onOpenBluetoothSettings: () -> Void
     let onQuit: () -> Void
     @AppStorage(PanelPreferences.clearGlassKey) private var clearGlass = false
@@ -51,6 +61,8 @@ public struct PanelView: View {
         showsIconPicker: Binding<Bool>,
         onSelect: @escaping (HeadphonesItem.ID, AmbientSoundMode) -> Void,
         onRetry: @escaping (HeadphonesItem.ID) -> Void = { _ in },
+        onSetUp: @escaping (HeadphonesItem.ID) -> Void = { _ in },
+        onForget: @escaping (HeadphonesItem.ID) -> Void = { _ in },
         onOpenBluetoothSettings: @escaping () -> Void,
         onQuit: @escaping () -> Void
     ) {
@@ -59,6 +71,8 @@ public struct PanelView: View {
         self.showsIconPicker = showsIconPicker
         self.onSelect = onSelect
         self.onRetry = onRetry
+        self.onSetUp = onSetUp
+        self.onForget = onForget
         self.onOpenBluetoothSettings = onOpenBluetoothSettings
         self.onQuit = onQuit
     }
@@ -77,7 +91,13 @@ public struct PanelView: View {
             } else {
                 ForEach(items) { item in
                     if item.id != items.first?.id { Divider() }
-                    HeadphonesSection(item: item, onSelect: { onSelect(item.id, $0) }, onRetry: { onRetry(item.id) })
+                    HeadphonesSection(
+                        item: item,
+                        onSelect: { onSelect(item.id, $0) },
+                        onRetry: { onRetry(item.id) },
+                        onSetUp: { onSetUp(item.id) },
+                        onForget: { onForget(item.id) }
+                    )
                 }
             }
             Divider()
@@ -122,6 +142,20 @@ struct HeadphonesSection: View {
     let item: HeadphonesItem
     let onSelect: (AmbientSoundMode) -> Void
     let onRetry: () -> Void
+    let onSetUp: () -> Void
+    let onForget: () -> Void
+    /// Whether the "forget these headphones?" row is showing. (See IconPicker for why `State` is
+    /// used directly.)
+    private let confirmsForget = State(initialValue: false)
+
+    init(item: HeadphonesItem, onSelect: @escaping (AmbientSoundMode) -> Void, onRetry: @escaping () -> Void,
+         onSetUp: @escaping () -> Void, onForget: @escaping () -> Void) {
+        self.item = item
+        self.onSelect = onSelect
+        self.onRetry = onRetry
+        self.onSetUp = onSetUp
+        self.onForget = onForget
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -132,12 +166,36 @@ struct HeadphonesSection: View {
                     .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                if item.isBeta {
-                    BetaBadge()
+                switch item.badge {
+                case .beta: BetaBadge()
+                case .learned:
+                    Button {
+                        withAnimation(.smooth) { confirmsForget.wrappedValue.toggle() }
+                    } label: {
+                        BadgeLabel(text: "Learned")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Set up with the SoundcoreBar setup assistant. Click to forget.")
+                case nil: EmptyView()
                 }
                 Spacer(minLength: 0)
-                if item.state == .connecting {
+                if item.state == .connecting || item.state == .settingUp {
                     ProgressView().controlSize(.small)
+                }
+            }
+            if confirmsForget.wrappedValue, item.badge == .learned {
+                HStack(alignment: .firstTextBaseline) {
+                    note("Forget these headphones? You can set them up again.")
+                    Spacer(minLength: 8)
+                    Button("Keep") {
+                        withAnimation(.smooth) { confirmsForget.wrappedValue = false }
+                    }
+                    .controlSize(.small)
+                    Button("Forget", role: .destructive) {
+                        confirmsForget.wrappedValue = false
+                        onForget()
+                    }
+                    .controlSize(.small)
                 }
             }
             switch item.state {
@@ -160,7 +218,16 @@ struct HeadphonesSection: View {
                         .controlSize(.small)
                 }
             case .unsupported(let message):
-                note(message)
+                HStack(alignment: .firstTextBaseline) {
+                    note(message)
+                    Spacer(minLength: 8)
+                    Button("Set Up…", action: onSetUp)
+                        .controlSize(.small)
+                        .help("Teach SoundcoreBar these headphones")
+                }
+            case .settingUp:
+                ModeButtons(current: nil, onSelect: nil)
+                note("Setting up in the SoundcoreBar Setup window.")
             }
         }
     }
@@ -176,14 +243,21 @@ struct HeadphonesSection: View {
 /// Marks models known only from OpenSCQ30's research, not yet tried with SoundcoreBar.
 struct BetaBadge: View {
     var body: some View {
-        Text("Beta")
+        BadgeLabel(text: "Beta")
+            .help("SoundcoreBar has not been tried with this model yet. If something looks wrong, please open an issue on GitHub.")
+    }
+}
+
+private struct BadgeLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(.secondary.opacity(0.15), in: .capsule)
-            .help("SoundcoreBar has not been tried with this model yet. If something looks wrong, please open an issue on GitHub.")
-            .accessibilityLabel("Beta")
     }
 }
 

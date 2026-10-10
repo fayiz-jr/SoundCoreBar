@@ -22,8 +22,11 @@ public final class HeadphonesMonitor: NSObject {
     private var disconnectNotifications: [String: IOBluetoothUserNotification] = [:]
     private let log = Logger(subsystem: "com.fayizjr.SoundcoreBar", category: "monitor")
 
-    /// The models connections may recognise.
-    public var models: [HeadphoneModel] = HeadphoneModels.builtIn
+    /// The models connections may recognise. Changing them makes connected headphones that were
+    /// not recognised, or whose model was removed, try again.
+    public var models: [HeadphoneModel] = HeadphoneModels.builtIn {
+        didSet { connections.forEach { $0.useModels(models) } }
+    }
 
     public override init() {}
 

@@ -45,6 +45,8 @@ public final class SoundcoreConnection: NSObject {
     private static let slowRetryInterval: Duration = .seconds(30)
     private static let unreachable = "Couldn’t connect. Another app may be using the headphones’ controls."
     private static let openTimeout: Duration = .seconds(10)
+    /// How long to wait before opening the channel again after closing it, as between retries.
+    private static let reopenDelay: Duration = .seconds(2)
     /// How long a switch may take to settle. Earbuds pass a switch on to the other bud, then push
     /// "sound modes changed" (within about 1 s when measured on the R50i NC). Sending anything else
     /// before that can undo it: a state request answered first made the R50i NC revert the switch
@@ -139,12 +141,20 @@ public final class SoundcoreConnection: NSObject {
 
     private func restart() {
         reopenTask?.cancel()
+        let closedOpenChannel = channel != nil
         tearDownChannel()
         model = nil
         unrecognizedState = nil
         attempts = 0
         status = connectingStatus
-        start()
+        guard closedOpenChannel else { return start() }
+        // Reopening a channel straight after closing it timed out every time on the Q20i and the
+        // R50i NC; the close needs a moment to finish.
+        reopenTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.reopenDelay)
+            guard !Task.isCancelled else { return }
+            self?.start()
+        }
     }
 
     /// Switches the ambient sound mode. The checkmark moves once the headphones acknowledge, and
@@ -226,7 +236,7 @@ public final class SoundcoreConnection: NSObject {
         if attempts < Self.quickAttempts {
             log.notice("\(self.name, privacy: .public): \(reason, privacy: .public); retrying")
             if !isFailed { status = connectingStatus }
-            wait = .seconds(2)
+            wait = Self.reopenDelay
         } else {
             if !isFailed {
                 log.error("\(self.name, privacy: .public): \(reason, privacy: .public); retrying every 30 s")

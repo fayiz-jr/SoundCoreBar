@@ -3,12 +3,28 @@
 Switch your Soundcore headphones between **Noise Cancelling**, **Transparency** and **Normal**
 from the Mac menu bar, like the AirPods mode switcher.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/panel-dark.png">
+    <img src="docs/panel-light.png" width="404" alt="The SoundcoreBar panel: Noise Cancelling, Transparency and Normal buttons for a pair of R50i NC earbuds and a pair of Q20i headphones, on Liquid Glass">
+  </picture>
+</p>
+
 - A Liquid Glass panel with three round buttons per pair; the current mode is tinted.
 - Shows the real mode, read from the headphones, and follows changes made with their own buttons.
 - Knows 26 Soundcore headphones with noise control, picks up whichever pair connects, and
   handles two pairs at once.
 - Your choice of menu bar icon: a rabbit by default, or any symbol, emoji or short text.
 - No Dock icon, no account, no network: it only talks to your headphones over Bluetooth.
+
+**[Download the latest version](../../releases/latest)** (free, for macOS 13 or newer).
+
+> [!IMPORTANT]
+> **macOS blocks the first launch.** SoundcoreBar isn’t notarized by Apple, so the first time you
+> open it macOS says it can’t check it for malware. That’s expected: close the message (don’t move
+> the app to the Trash), open **System Settings › Privacy & Security**, scroll down to where it
+> says SoundcoreBar was blocked, and click **Open Anyway**. You only do this once, and again after
+> downloading an update. [Step by step](#install)
 
 > SoundcoreBar is an independent, unofficial app. It is not affiliated with, endorsed by or
 > sponsored by Anker Innovations. Soundcore and Anker are trademarks of Anker Innovations Limited.
@@ -62,11 +78,17 @@ silicon. The Liquid Glass look needs macOS 26 or newer; older systems get regula
 
 1. Download `SoundcoreBar-<version>.zip` from [Releases](../../releases/latest), unzip it and move
    **SoundcoreBar** to your Applications folder.
-2. Open it. Because SoundcoreBar is not notarized by Apple (that needs a paid developer account),
-   macOS blocks the first launch. To allow it once:
-   - open **System Settings › Privacy & Security**, scroll down to the message about SoundcoreBar
-     and click **Open Anyway**, then confirm; or
-   - in Terminal: `xattr -dr com.apple.quarantine /Applications/SoundcoreBar.app`
+2. Open it. macOS blocks the first launch and says it can’t verify SoundcoreBar is free of malware.
+   This happens to every app that isn’t notarized by Apple, which needs a paid developer account;
+   SoundcoreBar’s source is all here if you’d like to check it or build it yourself. Close the
+   message (don’t choose Move to Trash), then allow the app once:
+   1. Open **System Settings › Privacy & Security**.
+   2. Scroll down to the **Security** section. It says SoundcoreBar was blocked; click
+      **Open Anyway**.
+   3. Confirm with your password or Touch ID, then click **Open Anyway** once more.
+
+   Or, in Terminal: `xattr -dr com.apple.quarantine /Applications/SoundcoreBar.app`, then open
+   the app as usual.
 3. When macOS asks whether SoundcoreBar may use Bluetooth, click **Allow**. It needs Bluetooth
    to talk to your headphones.
 4. Optional: add it under **System Settings › General › Login Items** to start it at login.
@@ -114,6 +136,7 @@ There are no SwiftUI previews without Xcode, so `PanelPreview` stands in:
 ```bash
 swift run PanelPreview build/preview   # PNGs of the panel's states, light and dark (layout only)
 swift run PanelPreview --live          # opens the real glass panel briefly and prints its geometry
+swift run PanelPreview --screenshot docs/panel-dark.png --dark   # the README picture (and without --dark)
 ```
 
 To watch the packets while you use the app:

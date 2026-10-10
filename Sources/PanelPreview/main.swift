@@ -16,6 +16,9 @@ import SwiftUI
 //   PanelPreview --live --hold <s>    the same, then keeps the panel open for <s> seconds (for a
 //                                     screenshot); --clear holds it with Clear Glass, --badges shows
 //                                     Beta, Learned and unsupported headphones instead
+//   PanelPreview --screenshot <file.png> [--dark]
+//                                     the README picture: the real glass panel over a plain backdrop
+//                                     drawn by this tool, so nothing else on screen shows through
 
 let badgeSample = [
     HeadphonesItem(id: "learned", name: "soundcore Space Q46", formFactor: .overEar, badge: .learned, state: .ready(.normal)),
@@ -66,7 +69,9 @@ let setupScenarios: [(name: String, state: SetupState)] = [
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
-if CommandLine.arguments.contains("--live") {
+if let index = CommandLine.arguments.firstIndex(of: "--screenshot"), CommandLine.arguments.indices.contains(index + 1) {
+    runScreenshot(to: CommandLine.arguments[index + 1], dark: CommandLine.arguments.contains("--dark"))
+} else if CommandLine.arguments.contains("--live") {
     runLive()
 } else {
     try renderImages(to: URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? "build/preview"))
@@ -170,4 +175,59 @@ func findScrollView(in view: NSView) -> NSScrollView? {
         if let found = findScrollView(in: subview) { return found }
     }
     return nil
+}
+
+// MARK: README screenshot
+
+func runScreenshot(to path: String, dark: Bool) {
+    app.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+    UserDefaults.standard.set(false, forKey: PanelPreferences.clearGlassKey)
+    let items = [
+        HeadphonesItem(id: "earbuds", name: "soundcore R50i NC", formFactor: .earbuds, state: .ready(.transparency)),
+        HeadphonesItem(id: "over-ear", name: "soundcore Q20i", formFactor: .overEar, state: .ready(.noiseCanceling)),
+    ]
+    let glass = GlassPanel(width: PanelView.width, content: AnyView(panel(items)))
+    // Away from the menu bar, so the picture holds only the panel and the backdrop.
+    let screen = NSScreen.main!.frame
+    glass.open(below: NSRect(x: screen.midX - 12, y: screen.midY + 260, width: 24, height: 24))
+    RunLoop.main.run(until: Date().addingTimeInterval(0.8))
+
+    let margin: CGFloat = 44
+    let area = glass.glassFrame.insetBy(dx: -margin, dy: -margin).integral
+    let backdrop = NSWindow(contentRect: area, styleMask: .borderless, backing: .buffered, defer: false)
+    backdrop.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue - 1)
+    backdrop.contentView = BackdropView(dark: dark)
+    backdrop.orderFrontRegardless()
+    RunLoop.main.run(until: Date().addingTimeInterval(1.2))
+
+    // screencapture counts from the top left of the main display.
+    let region = "\(Int(area.minX)),\(Int(screen.maxY - area.maxY)),\(Int(area.width)),\(Int(area.height))"
+    let capture = Process()
+    capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+    capture.arguments = ["-x", "-R", region, path]
+    try? capture.run()
+    capture.waitUntilExit()
+    print(capture.terminationStatus == 0 ? path : "screencapture failed (\(capture.terminationStatus))")
+    glass.close()
+    backdrop.orderOut(nil)
+    exit(capture.terminationStatus)
+}
+
+/// A soft gradient for the glass to sit on, in the spirit of the macOS wallpapers.
+final class BackdropView: NSView {
+    init(dark: Bool) {
+        super.init(frame: .zero)
+        wantsLayer = true
+        let gradient = CAGradientLayer()
+        gradient.colors = (dark
+            ? [NSColor(srgbRed: 0.10, green: 0.09, blue: 0.27, alpha: 1), NSColor(srgbRed: 0.33, green: 0.16, blue: 0.47, alpha: 1),
+               NSColor(srgbRed: 0.05, green: 0.33, blue: 0.43, alpha: 1)]
+            : [NSColor(srgbRed: 0.78, green: 0.80, blue: 1.00, alpha: 1), NSColor(srgbRed: 0.98, green: 0.80, blue: 0.86, alpha: 1),
+               NSColor(srgbRed: 0.75, green: 0.93, blue: 0.96, alpha: 1)]).map(\.cgColor)
+        gradient.startPoint = CGPoint(x: 0, y: 1)
+        gradient.endPoint = CGPoint(x: 1, y: 0)
+        layer = gradient
+    }
+
+    required init?(coder: NSCoder) { nil }
 }

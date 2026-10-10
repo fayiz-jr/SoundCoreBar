@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 fayiz-jr
+
 /// Soundcore Q20i (A3004), over-ear. Bluetooth name "soundcore Q20i".
 ///
 /// State body (61 bytes on firmware 00.26): battery (2), firmware (5), serial (16), equalizer (12),

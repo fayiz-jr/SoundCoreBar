@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 fayiz-jr
+
 import SwiftUI
 
 /// A collapsible section for choosing the menu bar icon: symbols, emoji, or your own text.

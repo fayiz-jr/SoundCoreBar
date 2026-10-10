@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Runs the unit tests. With only the Command Line Tools installed, SwiftPM does not find
 # swift-testing's macro plugin on its own, so point it there when that directory exists.
 set -euo pipefail

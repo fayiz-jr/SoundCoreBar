@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 fayiz-jr
+
 public enum AmbientSoundMode: UInt8, CaseIterable, Sendable {
     case noiseCanceling = 0
     case transparency = 1

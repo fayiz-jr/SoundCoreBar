@@ -1,4 +1,6 @@
 // swift-tools-version: 6.2
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 fayiz-jr
 import PackageDescription
 
 let mainActorByDefault: [SwiftSetting] = [.defaultIsolation(MainActor.self)]

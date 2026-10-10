@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 fayiz-jr
+
 import SwiftUI
 
 /// What the menu bar shows: an SF Symbol, or a short piece of text such as an emoji.

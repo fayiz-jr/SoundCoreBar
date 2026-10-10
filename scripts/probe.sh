@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Builds SoundcoreProbe.app and runs it through LaunchServices, so macOS treats it as its own app
 # (and asks for Bluetooth permission for it, not for your terminal). Output goes to build/probe.log
 # and is printed when the probe exits.

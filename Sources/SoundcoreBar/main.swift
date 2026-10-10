@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 fayiz-jr
+
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {

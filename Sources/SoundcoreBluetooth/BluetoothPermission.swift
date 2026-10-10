@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 fayiz-jr
+
 import CoreBluetooth
 
 /// Gets Bluetooth access before any IOBluetooth call. CoreBluetooth shows the system prompt and

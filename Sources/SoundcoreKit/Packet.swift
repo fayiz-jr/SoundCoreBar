@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 fayiz-jr
+
 /// Which way a packet travels. Each direction has a fixed 5-byte prefix.
 public enum Direction: Sendable {
     /// Mac to headphones.

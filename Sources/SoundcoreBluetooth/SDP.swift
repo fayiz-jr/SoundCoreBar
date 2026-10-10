@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 fayiz-jr
+
 import Foundation
 @preconcurrency import IOBluetooth
 import SoundcoreKit

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 fayiz-jr
+
 extension Sequence<UInt8> {
     /// Lowercase hex bytes separated by spaces, e.g. `08 ee 00`.
     public var hexString: String {

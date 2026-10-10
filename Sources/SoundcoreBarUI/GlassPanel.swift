@@ -7,12 +7,16 @@ import SwiftUI
 /// A borderless Liquid Glass panel that hangs under a menu bar item. It is as tall as its content,
 /// scrolls when that would not fit on screen, and closes on a click elsewhere or Escape.
 public final class GlassPanel: NSObject {
-    private static let cornerRadius: CGFloat = 28
+    private static var cornerRadius: CGFloat {
+        if #available(macOS 26, *) { return 28 }
+        return 18
+    }
     private static let gapBelowMenuBar: CGFloat = 6
     private static let screenMargin: CGFloat = 8
 
     private let panel: AnchoredPanel
     private let glass: NSView
+    private let width: CGFloat
     private let hosting: NSHostingView<MeasuredScrollView>
     private var contentHeight: CGFloat = 0
     private var anchor: NSRect?
@@ -21,13 +25,16 @@ public final class GlassPanel: NSObject {
     /// When the panel last closed, so the click that closed it cannot also reopen it.
     public private(set) var lastClosed = Date.distantPast
     public var onClose: (() -> Void)?
-    /// Called after every resize with the panel's frame and the content's natural height.
+    /// Called after every resize with the glass's frame on screen and the content's natural height.
     public var onLayout: ((NSRect, CGFloat) -> Void)?
 
     public var isOpen: Bool { panel.isVisible }
     public var window: NSWindow { panel }
+    /// The visible glass on screen.
+    public var glassFrame: NSRect { panel.frame }
 
     public init(width: CGFloat, content: AnyView) {
+        self.width = width
         panel = AnchoredPanel(
             contentRect: NSRect(x: 0, y: 0, width: width, height: 200),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -42,13 +49,10 @@ public final class GlassPanel: NSObject {
 
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        // Liquid Glass draws its own shadow along its rounded shape. The window's shadow follows the
-        // window's square outline and showed as dark lines around the corners.
-        if #available(macOS 26, *) {
-            panel.hasShadow = false
-        } else {
-            panel.hasShadow = true
-        }
+        // The window server draws the shadow, around the window's visible pixels, as it does for
+        // menus. The glass is clipped to its rounded shape (below), so that is all it traces; the
+        // glass's own shadow, which filled the window's square corners, is clipped away with it.
+        panel.hasShadow = true
         panel.level = .popUpMenu
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.isReleasedWhenClosed = false
@@ -64,7 +68,15 @@ public final class GlassPanel: NSObject {
             hosting.autoresizingMask = [.width, .height]
             glass.addSubview(hosting)
         }
-        panel.contentView = glass
+        let clip = NSView(frame: NSRect(x: 0, y: 0, width: width, height: 200))
+        clip.wantsLayer = true
+        clip.layer?.cornerRadius = Self.cornerRadius
+        clip.layer?.cornerCurve = .continuous
+        clip.layer?.masksToBounds = true
+        glass.frame = clip.bounds
+        glass.autoresizingMask = [.width, .height]
+        clip.addSubview(glass)
+        panel.contentView = clip
         applyGlassStyle()
         defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
@@ -80,6 +92,7 @@ public final class GlassPanel: NSObject {
         hosting.layoutSubtreeIfNeeded()
         updateFrame()
         panel.makeKeyAndOrderFront(nil)
+        refreshShadow()
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         ) { [weak self] _ in
@@ -124,7 +137,6 @@ public final class GlassPanel: NSObject {
         guard let anchor else { return }
         let screen = NSScreen.screens.first { $0.frame.intersects(anchor) } ?? NSScreen.main
         guard let visible = screen?.visibleFrame else { return }
-        let width = panel.frame.width
         let top = min(anchor.minY, visible.maxY) - Self.gapBelowMenuBar
         let maxHeight = top - visible.minY - Self.screenMargin
         let height = min(max(contentHeight, 1), maxHeight).rounded(.up)
@@ -133,8 +145,15 @@ public final class GlassPanel: NSObject {
         panel.anchoredTop = top
         panel.setFrame(NSRect(x: x, y: top - height, width: width, height: height), display: true)
         hosting.layoutSubtreeIfNeeded()
+        refreshShadow()
+        onLayout?(glassFrame, contentHeight)
+    }
+
+    /// The shadow is traced from what the window shows, so it is traced again once the new size
+    /// has been drawn.
+    private func refreshShadow() {
         panel.invalidateShadow()
-        onLayout?(panel.frame, contentHeight)
+        DispatchQueue.main.async { [weak self] in self?.panel.invalidateShadow() }
     }
 
     // MARK: Glass
@@ -149,9 +168,6 @@ public final class GlassPanel: NSObject {
         effect.material = .popover
         effect.blendingMode = .behindWindow
         effect.state = .active
-        effect.wantsLayer = true
-        effect.layer?.cornerRadius = 18
-        effect.layer?.masksToBounds = true
         return effect
     }
 

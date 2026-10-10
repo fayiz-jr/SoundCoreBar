@@ -13,6 +13,8 @@ import SwiftUI
 //   PanelPreview --live               opens the real glass panel under the top right corner of the
 //                                     screen, opens and closes the icon picker, and prints the
 //                                     window, content and scroll geometry after each step
+//   PanelPreview --live --hold <s>    the same, then keeps the panel open for <s> seconds (for a
+//                                     screenshot); --clear holds it with Clear Glass
 
 let earbuds = HeadphonesItem(id: "earbuds", name: "🐰soundcore R50i🦋", formFactor: .earbuds, state: .ready(.transparency))
 let overEar = HeadphonesItem(id: "over-ear", name: "soundcore Q20i", formFactor: .overEar, state: .ready(.noiseCanceling))
@@ -77,20 +79,20 @@ func runLive() {
     let state = LiveState()
     let glass = GlassPanel(width: PanelView.width, content: AnyView(LiveContent(state: state)))
     glass.onLayout = { frame, contentHeight in
-        print("  layout: window \(frame.integral) content height \(Int(contentHeight))")
+        print("  layout: glass \(frame.integral) content height \(Int(contentHeight))")
     }
     let screen = NSScreen.main!.frame
     let anchor = NSRect(x: screen.maxX - 220, y: NSScreen.main!.visibleFrame.maxY, width: 24, height: 24)
 
     func report(_ step: String) {
         RunLoop.main.run(until: Date().addingTimeInterval(0.8))
-        let frame = glass.window.frame
+        let frame = glass.glassFrame
         let scroll = glass.window.contentView.flatMap(findScrollView)
         let offset = scroll.map { Int($0.contentView.bounds.origin.y) } ?? -1
         let document = scroll?.documentView.map { Int($0.frame.height) } ?? -1
         let viewport = scroll.map { Int($0.contentView.bounds.height) } ?? -1
         let underMenuBar = abs(frame.maxY - (anchor.minY - 6)) < 1
-        print("\(step): window height \(Int(frame.height)), top under menu bar \(underMenuBar), "
+        print("\(step): glass height \(Int(frame.height)), top under menu bar \(underMenuBar), "
               + "viewport \(viewport), document \(document), scroll offset \(offset)")
     }
 
@@ -102,6 +104,14 @@ func runLive() {
     report("icon picker closed")
     state.showsIconPicker = true
     report("icon picker open again")
+    if let seconds = CommandLine.arguments.firstIndex(of: "--hold")
+        .flatMap({ CommandLine.arguments.indices.contains($0 + 1) ? Double(CommandLine.arguments[$0 + 1]) : nil }) {
+        state.showsIconPicker = false
+        UserDefaults.standard.set(CommandLine.arguments.contains("--clear"), forKey: PanelPreferences.clearGlassKey)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        print("holding at glass \(glass.glassFrame.integral) for \(seconds) s")
+        RunLoop.main.run(until: Date().addingTimeInterval(seconds))
+    }
     glass.close()
     exit(0)
 }

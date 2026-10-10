@@ -35,6 +35,8 @@ final class StatusItemController: NSObject {
             panel.close()
             return
         }
+        // This click already closed the panel on its way here; it should not open it again.
+        guard Date().timeIntervalSince(panel.lastClosed) > 0.3 else { return }
         guard let button = statusItem.button, let window = button.window else { return }
         panel.open(below: window.convertToScreen(button.convert(button.bounds, to: nil)))
         button.highlight(true)

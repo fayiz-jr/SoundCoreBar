@@ -18,6 +18,8 @@ public final class GlassPanel: NSObject {
     private var anchor: NSRect?
     private var outsideClickMonitor: Any?
     private var defaultsObserver: NSObjectProtocol?
+    /// When the panel last closed, so the click that closed it cannot also reopen it.
+    public private(set) var lastClosed = Date.distantPast
     public var onClose: (() -> Void)?
     /// Called after every resize with the panel's frame and the content's natural height.
     public var onLayout: ((NSRect, CGFloat) -> Void)?
@@ -40,7 +42,13 @@ public final class GlassPanel: NSObject {
 
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        // Liquid Glass draws its own shadow along its rounded shape. The window's shadow follows the
+        // window's square outline and showed as dark lines around the corners.
+        if #available(macOS 26, *) {
+            panel.hasShadow = false
+        } else {
+            panel.hasShadow = true
+        }
         panel.level = .popUpMenu
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.isReleasedWhenClosed = false
@@ -75,16 +83,25 @@ public final class GlassPanel: NSObject {
         outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.close() }
+            MainActor.assumeIsolated {
+                // A click on the menu bar item can arrive here too; the item toggles the panel itself.
+                guard let self, !self.isOnAnchor(NSEvent.mouseLocation) else { return }
+                self.close()
+            }
         }
     }
 
     public func close() {
         guard panel.isVisible else { return }
         panel.orderOut(nil)
+        lastClosed = Date()
         if let outsideClickMonitor { NSEvent.removeMonitor(outsideClickMonitor) }
         outsideClickMonitor = nil
         onClose?()
+    }
+
+    private func isOnAnchor(_ point: NSPoint) -> Bool {
+        anchor?.insetBy(dx: -2, dy: -2).contains(point) ?? false
     }
 
     // MARK: Layout

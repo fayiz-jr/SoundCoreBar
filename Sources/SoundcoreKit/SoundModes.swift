@@ -15,26 +15,33 @@ public enum AmbientSoundMode: UInt8, CaseIterable, Sendable {
     }
 }
 
-/// A model's sound-modes block, byte for byte as the headphones last reported it. Byte 0 is always
-/// the ambient sound mode; what the other bytes mean depends on the model, so they are kept as-is.
+/// A model's sound-modes block, byte for byte as the headphones last reported it. Byte 0 is the
+/// mode; what the other bytes mean depends on the model, so they are kept as they are.
 public struct SoundModes: Equatable, Sendable, CustomStringConvertible {
     public let bytes: [UInt8]
 
-    /// Nil unless byte 0 is a valid ambient sound mode.
-    public init?(_ bytes: [UInt8]) {
-        guard let first = bytes.first, AmbientSoundMode(rawValue: first) != nil else { return nil }
+    /// Nil unless byte 0 is a mode: 0–2, or one of `extraModes` (the Liberty 4 Pro's airplane mode).
+    public init?(_ bytes: [UInt8], extraModes: Set<UInt8> = []) {
+        guard let first = bytes.first,
+              AmbientSoundMode(rawValue: first) != nil || extraModes.contains(first)
+        else { return nil }
         self.bytes = bytes
     }
 
-    public var ambient: AmbientSoundMode {
-        AmbientSoundMode(rawValue: bytes[0])!
+    /// The mode, or nil for one this app does not switch to (such as airplane mode).
+    public var ambient: AmbientSoundMode? {
+        AmbientSoundMode(rawValue: bytes[0])
     }
 
     public func withAmbient(_ mode: AmbientSoundMode) -> SoundModes {
-        var bytes = bytes
-        bytes[0] = mode.rawValue
-        return SoundModes(bytes)!
+        withMode(byte: mode.rawValue)
     }
 
-    public var description: String { "\(ambient.title) [\(bytes.hexString)]" }
+    func withMode(byte: UInt8) -> SoundModes {
+        var bytes = bytes
+        bytes[0] = byte
+        return SoundModes(bytes, extraModes: [byte])!
+    }
+
+    public var description: String { "\(ambient?.title ?? "mode \(bytes[0])") [\(bytes.hexString)]" }
 }

@@ -5,7 +5,8 @@ from the Mac menu bar, like the AirPods mode switcher.
 
 - A Liquid Glass panel with three round buttons per pair; the current mode is tinted.
 - Shows the real mode, read from the headphones, and follows changes made with their own buttons.
-- Picks up whichever supported pair connects, and handles two pairs at once.
+- Knows 26 Soundcore headphones with noise control, picks up whichever pair connects, and
+  handles two pairs at once.
 - Your choice of menu bar icon: a rabbit by default, or any symbol, emoji or short text.
 - No Dock icon, no account, no network: it only talks to your headphones over Bluetooth.
 
@@ -14,13 +15,45 @@ from the Mac menu bar, like the AirPods mode switcher.
 
 ## Supported headphones
 
+Tested with SoundcoreBar:
+
 | Headphones | Model | Tested on firmware |
 | --- | --- | --- |
 | Soundcore Q20i (over-ear) | A3004 | 00.26 |
-| Soundcore R50i NC (earbuds) | A3959 | 01.65 |
+| Soundcore R50i NC / P30i (earbuds) | A3959 | 01.65 |
 
-Renamed headphones work too. Many other Soundcore models speak the same protocol and could be
-added; see [Adding your headphones](#adding-your-headphones).
+**Beta.** These follow the layouts worked out by [OpenSCQ30](https://github.com/Oppzippy/OpenSCQ30)
+and pass tests built from real packets of each model, but have not been tried with SoundcoreBar
+yet, so the panel marks them Beta. If you have one, please
+[open an issue](../../issues) to say whether it works.
+
+| Headphones | Model |
+| --- | --- |
+| Life Q30, Life Tune (over-ear) | A3028, A3029 |
+| Life Q35, Life Tune Pro (over-ear) | A3027, A3030 |
+| Vortex (over-ear) | A3031 |
+| Space One, Space One Pro (over-ear) | A3035, A3062 |
+| Space Q45 (over-ear) | A3040 |
+| Liberty 2 Pro+ | A3930 |
+| Liberty Air 2 Pro | A3951 |
+| Liberty 3 Pro | A3952 |
+| Liberty 4 NC | A3947 |
+| Liberty 4 Pro (airplane mode shows as no mode) | A3954 |
+| Liberty 5 | A3957 |
+| Life Dot 2 NC, Life A2 NC | A3931, A3935 |
+| Life Note 3, Life P3 | A3933, A3939 |
+| P31i, R60i NC | D1202 |
+| P40i | A3955 |
+| Space A40 | A3936 |
+| Sport X20 | A3968 |
+
+SoundcoreBar recognises the model from the serial number in the headphones’ reply, so renamed
+headphones work too. The older Liberty 2 Pro+, Liberty Air 2 Pro, Life Dot 2 NC, Life A2 NC,
+Life Note 3, Life P3 and Vortex have no serial number there; they are recognised by their
+Bluetooth name, so keep the model in it if you rename them. Soundcore devices that match no known
+model show as not supported and are sent nothing more. Models without noise control (such as the
+plain R50i or the A20i) have nothing to switch. To add another model, see
+[Adding your headphones](#adding-your-headphones).
 
 ## Install
 
@@ -97,10 +130,10 @@ scripts/probe.sh --device Q20i --listen 30     # keep listening; press the noise
 scripts/probe.sh --device R50i --set nc        # switch through the app's own code: nc | transparency | normal
 ```
 
-A model is a small type in `Sources/SoundcoreKit/Models/`: its model number, a word from its
-Bluetooth name, the length of its state reply and where the sound-modes block sits in it. Add it to
-`HeadphoneModels.all` with a test built from a captured state packet. [OpenSCQ30](https://github.com/Oppzippy/OpenSCQ30)
-documents the layouts of many more Soundcore models.
+A model is one entry in `Sources/SoundcoreKit/BuiltInModels.swift`: its model numbers, words
+from its Bluetooth name, where the serial number and the sound-modes block sit in its state reply,
+and whether its change notices carry the whole block. Add a test built from a captured state
+packet, like those in `Tests/SoundcoreKitTests/ModelTests.swift`.
 
 If you would rather open an issue, include the probe’s output for your headphones, but **remove
 the serial number and Bluetooth address** from it first: the probe prints both.
@@ -108,12 +141,13 @@ the serial number and Bluetooth address** from it first: the probe prints both.
 ## How it works
 
 The app opens the headphones’ Soundcore RFCOMM service (`0cf12d31-fac3-4553-bd80-d6832e7…`, or
-Serial Port if missing), asks for their state and keeps the channel open for change notices. To
+Serial Port if missing), asks for their state, works out the model from the reply and keeps the
+channel open for change notices. To
 switch, it sends back the last sound-modes block the headphones reported with only the mode byte
 changed, resends up to three times without an acknowledgement, and then sends nothing else until
 the headphones report the change or two seconds pass.
 
-- `SoundcoreKit`: packet framing, stream reassembly and the per-model layouts. No Bluetooth.
+- `SoundcoreKit`: packet framing, stream reassembly, the model table and recognition. No Bluetooth.
 - `SoundcoreBluetooth`: SDP lookup, the RFCOMM connection and connect/disconnect monitoring, all on
   the main thread, where IOBluetooth delivers its callbacks.
 - `SoundcoreBarUI` and `SoundcoreBar`: the glass panel and the app.
@@ -132,10 +166,11 @@ Things the real headphones do that were worth writing down:
 
 SoundcoreBar is built on the protocol research of **[OpenSCQ30](https://github.com/Oppzippy/OpenSCQ30)**
 by Kyle Scheuing ([@Oppzippy](https://github.com/Oppzippy)), the open-source Soundcore controller
-for Linux, Windows and Android. Its work on the packet format, commands and per-model layouts made
-this app possible, and its tests supplied the known-good packets SoundcoreBar is checked against.
-No code was copied: SoundcoreBar is an independent Swift implementation, and like OpenSCQ30 it is
-licensed under the GPL.
+for Linux, Windows and Android. It is SoundcoreBar’s database: its work on the packet format,
+commands and per-model layouts made this app possible, every Beta model comes from it, and the
+real packets SoundcoreBar is tested against (`Tests/SoundcoreKitTests/OpenSCQ30Fixtures.swift`)
+come from its tests and device faker. No code was copied: SoundcoreBar is an independent Swift
+implementation, and like OpenSCQ30 it is licensed under the GPL.
 
 ## License
 

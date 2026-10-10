@@ -8,20 +8,27 @@ import SwiftUI
 public struct HeadphonesItem: Identifiable, Equatable {
     public enum State: Equatable {
         case connecting
-        case ready(AmbientSoundMode)
-        /// Connected but not usable; the message says why.
+        /// Nil while the headphones are in a mode not shown here, such as airplane mode.
+        case ready(AmbientSoundMode?)
+        /// Connected but not reachable for now; the message says why, and trying again may help.
         case problem(String)
+        /// Headphones this app does not know how to control.
+        case unsupported(String)
     }
 
     public let id: String
     public let name: String
-    public let formFactor: FormFactor
+    /// Nil until the model is known.
+    public let formFactor: FormFactor?
+    /// A model that has not been tested on real headphones yet.
+    public let isBeta: Bool
     public let state: State
 
-    public init(id: String, name: String, formFactor: FormFactor, state: State) {
+    public init(id: String, name: String, formFactor: FormFactor?, isBeta: Bool = false, state: State) {
         self.id = id
         self.name = name
         self.formFactor = formFactor
+        self.isBeta = isBeta
         self.state = state
     }
 }
@@ -125,6 +132,9 @@ struct HeadphonesSection: View {
                     .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if item.isBeta {
+                    BetaBadge()
+                }
                 Spacer(minLength: 0)
                 if item.state == .connecting {
                     ProgressView().controlSize(.small)
@@ -133,6 +143,9 @@ struct HeadphonesSection: View {
             switch item.state {
             case .ready(let mode):
                 ModeButtons(current: mode, onSelect: onSelect)
+                if mode == nil {
+                    note("The headphones are in a mode not shown here, such as airplane mode.")
+                }
             case .connecting:
                 ModeButtons(current: nil, onSelect: nil)
             case .problem(let message):
@@ -146,8 +159,31 @@ struct HeadphonesSection: View {
                     Button("Try Again", action: onRetry)
                         .controlSize(.small)
                 }
+            case .unsupported(let message):
+                note(message)
             }
         }
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Marks models known only from OpenSCQ30's research, not yet tried with SoundcoreBar.
+struct BetaBadge: View {
+    var body: some View {
+        Text("Beta")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(.secondary.opacity(0.15), in: .capsule)
+            .help("SoundcoreBar has not been tried with this model yet. If something looks wrong, please open an issue on GitHub.")
+            .accessibilityLabel("Beta")
     }
 }
 

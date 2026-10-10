@@ -39,7 +39,8 @@ final class HeadphonesModel: ObservableObject {
             HeadphonesItem(
                 id: connection.address,
                 name: connection.name,
-                formFactor: connection.model.formFactor,
+                formFactor: connection.model?.formFactor,
+                isBeta: connection.model.map { !$0.verified } ?? false,
                 state: HeadphonesItem.State(connection.status)
             )
         }
@@ -51,7 +52,8 @@ private extension HeadphonesItem.State {
         switch status {
         case .connecting: self = .connecting
         case .ready(let mode): self = .ready(mode)
-        case .unsupported(let message), .failed(let message): self = .problem(message)
+        case .unsupported(let message): self = .unsupported(message)
+        case .failed(let message): self = .problem(message)
         }
     }
 }

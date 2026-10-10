@@ -6,8 +6,9 @@ import Foundation
 import OSLog
 import SoundcoreKit
 
-/// Follows Bluetooth connections and keeps a `SoundcoreConnection` for every connected pair of
-/// supported headphones, in the order they connected.
+/// Follows Bluetooth connections and keeps a `SoundcoreConnection` for every connected device that
+/// may be Soundcore headphones, in the order they connected. Each connection works out the model
+/// from the headphones' answer.
 public final class HeadphonesMonitor: NSObject {
     public private(set) var connections: [SoundcoreConnection] = []
     /// Called whenever a pair connects or disconnects, or a connection's status changes.
@@ -20,6 +21,9 @@ public final class HeadphonesMonitor: NSObject {
     private var connectNotification: IOBluetoothUserNotification?
     private var disconnectNotifications: [String: IOBluetoothUserNotification] = [:]
     private let log = Logger(subsystem: "com.fayizjr.SoundcoreBar", category: "monitor")
+
+    /// The models connections may recognise.
+    public var models: [HeadphoneModel] = HeadphoneModels.builtIn
 
     public override init() {}
 
@@ -53,14 +57,14 @@ public final class HeadphonesMonitor: NSObject {
     private func attach(_ device: IOBluetoothDevice, after delay: Duration) {
         guard let address = device.addressString,
               !connections.contains(where: { $0.address == address }),
-              let model = HeadphoneModels.model(forDeviceName: device.name ?? "")
+              isCandidate(device)
         else { return }
 
-        log.info("\(device.name ?? address, privacy: .public) connected (\(model.modelNumber, privacy: .public))")
+        log.info("\(device.name ?? address, privacy: .public) connected")
         disconnectNotifications[address] = device.register(
             forDisconnectNotification: self, selector: #selector(deviceDisconnected(_:device:))
         )
-        let connection = SoundcoreConnection(device: device, model: model)
+        let connection = SoundcoreConnection(device: device, models: models)
         connection.onChange = { [weak self] in self?.onChange?() }
         connections.append(connection)
         onChange?()
@@ -69,5 +73,12 @@ public final class HeadphonesMonitor: NSObject {
             try? await Task.sleep(for: delay)
             connection?.start()
         }
+    }
+
+    /// Soundcore by name, or renamed headphones that offer Soundcore's control service. Services
+    /// are only known once macOS has looked them up, which it does when the device first pairs.
+    private func isCandidate(_ device: IOBluetoothDevice) -> Bool {
+        HeadphoneModels.isCandidate(deviceName: device.name ?? "", among: models)
+            || device.rfcommServices.contains { $0.serviceClassUUIDs.contains(where: SoundcoreServiceUUID.isVendor) }
     }
 }

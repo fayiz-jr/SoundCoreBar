@@ -41,6 +41,11 @@ func renderImages(to outputDirectory: URL) throws {
         ("both-pairs", panel([earbuds, overEar])),
         ("icon-picker", panel([overEar], iconPicker: .constant(true))),
         ("connecting", panel([HeadphonesItem(id: "x", name: "soundcore Q20i", formFactor: .overEar, state: .connecting)])),
+        ("beta-and-unsupported", panel([
+            HeadphonesItem(id: "beta", name: "soundcore Liberty 4 Pro", formFactor: .earbuds, isBeta: true, state: .ready(nil)),
+            HeadphonesItem(id: "unknown", name: "soundcore Motion+", formFactor: nil,
+                           state: .unsupported("This model isn’t supported yet.")),
+        ])),
         ("none", panel([])),
         ("denied", panel([], denied: true)),
     ]

@@ -50,7 +50,7 @@ final class Probe: NSObject {
     private var summary: [String] = []
     private let cycleCount: Int
     private let stateAfterAck: Bool
-    private var model: (any HeadphoneModel)?
+    private var model: HeadphoneModel?
     private var lastModes: SoundModes?
 
     init(listenSeconds: Double, deviceFilter: String?, targetModes: [AmbientSoundMode], extraPacket: Packet?,
@@ -87,15 +87,12 @@ final class Probe: NSObject {
 
     private func switchModes(_ targets: [AmbientSoundMode]) {
         let paired = (IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice]) ?? []
-        guard let device = paired.first(where: { $0.isConnected() && isCandidate($0) }),
-              let model = HeadphoneModels.model(forDeviceName: device.name ?? "")
-        else {
-            finish(reason: "No connected, supported headphones match.")
+        guard let device = paired.first(where: { $0.isConnected() && isCandidate($0) }) else {
+            finish(reason: "No connected Soundcore headphones match.")
             return
         }
-        log("Switching \"\(device.name ?? "?")\" (\(model.modelNumber)) to "
-            + targets.map(\.title).joined(separator: " → "))
-        let connection = SoundcoreConnection(device: device, model: model)
+        log("Switching \"\(device.name ?? "?")\" to " + targets.map(\.title).joined(separator: " → "))
+        let connection = SoundcoreConnection(device: device)
         self.connection = connection
         connection.trace = { [weak self] line in self?.log("   " + line) }
         connection.onChange = { [weak self] in self?.connectionChanged(targets: targets) }
@@ -107,7 +104,8 @@ final class Probe: NSObject {
         log("status: \(connection.status)")
         guard case .ready(let mode) = connection.status, !setRequested else { return }
         setRequested = true
-        log("current mode: \(mode.title)")
+        if let model = connection.model { log("model: \(model.name) (\(model.id))\(model.verified ? "" : ", beta")") }
+        log("current mode: \(mode?.title ?? "other")")
         Task {
             for (index, target) in targets.enumerated() {
                 if index > 0 { try? await Task.sleep(for: .milliseconds(300)) }
@@ -124,7 +122,7 @@ final class Probe: NSObject {
         guard let connection else { return }
         if let remark { log(remark) }
         if case .ready(let mode) = connection.status {
-            note("\(connection.name): headphones report \(mode.title)")
+            note("\(connection.name): headphones report \(mode?.title ?? "another mode")")
         } else {
             note("\(connection.name): status \(connection.status)")
         }
@@ -185,7 +183,7 @@ final class Probe: NSObject {
         }
         let device = queue.removeFirst()
         self.device = device
-        model = HeadphoneModels.model(forDeviceName: device.name ?? "")
+        model = nil
         lastModes = nil
         stateReceived = false
         channelReady = false
@@ -289,8 +287,8 @@ final class Probe: NSObject {
         Task {
             var stuck = 0
             for round in 1...self.cycleCount {
-                guard let model = self.model, let current = self.lastModes else { break }
-                let target = AmbientSoundMode(rawValue: (current.ambient.rawValue + 1) % 3)!
+                guard let model = self.model, let current = self.lastModes, let ambient = current.ambient else { break }
+                let target = AmbientSoundMode(rawValue: (ambient.rawValue + 1) % 3)!
                 self.send(model.setSoundModesPacket(switchingTo: target, from: current),
                           label: "switch \(round) to \(target.title)")
                 try? await Task.sleep(for: .seconds(2))
@@ -300,7 +298,7 @@ final class Probe: NSObject {
                     stuck += 1
                     self.log("   round \(round): OK")
                 } else {
-                    self.log("   round \(round): FAILED, headphones say \(self.lastModes?.ambient.title ?? "?")")
+                    self.log("   round \(round): FAILED, headphones say \(self.lastModes?.description ?? "?")")
                 }
             }
             self.note("\(self.device?.name ?? "?"): \(stuck)/\(self.cycleCount) switches stuck "
@@ -310,17 +308,25 @@ final class Probe: NSObject {
     }
 
     private func trackModes(_ packet: Packet) {
+        if packet.command == .state, model == nil {
+            model = HeadphoneModels.identify(state: packet.body, deviceName: device?.name ?? "")
+            if let model {
+                note("\(device?.name ?? "?"): recognised as \(model.name) (\(model.id))\(model.verified ? "" : ", beta")")
+            } else {
+                note("\(device?.name ?? "?"): state of \(packet.body.count) bytes matches no known model")
+            }
+        }
         guard let model else { return }
         switch packet.command {
         case .state:
             if let modes = model.soundModes(inState: packet.body) {
                 lastModes = modes
-                log("   = state says \(modes.ambient.title)")
+                log("   = state says \(modes)")
             }
         case .soundModesChanged:
             if let current = lastModes, let modes = model.applyingChange(packet.body, to: current) {
                 lastModes = modes
-                log("   = change push says \(modes.ambient.title)")
+                log("   = change push says \(modes)")
             }
         case .setSoundModes:
             log("   = acknowledged")

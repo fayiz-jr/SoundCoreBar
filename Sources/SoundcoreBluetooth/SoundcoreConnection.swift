@@ -7,20 +7,26 @@ import OSLog
 import SoundcoreKit
 
 /// Keeps the control channel to one pair of headphones open, tracks its sound mode and switches it.
+/// Which model the headphones are is worked out from their first state reply; headphones that
+/// turn out not to be a known model are sent nothing more.
 ///
 /// Main thread only: IOBluetooth delivers channel callbacks on the run loop that opened the channel.
 /// Closing this connection closes only the RFCOMM channel; the audio connection is never touched.
 public final class SoundcoreConnection: NSObject {
     public enum Status: Equatable {
         case connecting
-        case ready(AmbientSoundMode)
+        /// Nil while the headphones are in a mode this app does not switch to, such as airplane mode.
+        case ready(AmbientSoundMode?)
         /// The headphones answered in a layout this app does not know; it will not send them anything.
         case unsupported(String)
         case failed(String)
     }
 
     public let device: IOBluetoothDevice
-    public let model: any HeadphoneModel
+    /// Known once the headphones have answered.
+    public private(set) var model: HeadphoneModel?
+    /// The state reply of headphones that are not a known model, for setting them up by hand.
+    public private(set) var unrecognizedState: [UInt8]?
     public let address: String
     public private(set) var status: Status = .connecting {
         didSet { if status != oldValue { onChange?() } }
@@ -66,15 +72,17 @@ public final class SoundcoreConnection: NSObject {
     private var attempts = 0
     private var awaitingSDP = false
     private var isClosed = false
+    private let models: [HeadphoneModel]
     private let log = Logger(subsystem: "com.fayizjr.SoundcoreBar", category: "connection")
 
-    public init(device: IOBluetoothDevice, model: any HeadphoneModel) {
+    /// `models` are the models the headphones may turn out to be.
+    public init(device: IOBluetoothDevice, models: [HeadphoneModel] = HeadphoneModels.builtIn) {
         self.device = device
-        self.model = model
+        self.models = models
         self.address = device.addressString ?? ""
     }
 
-    public var name: String { device.name ?? device.nameOrAddress ?? model.modelNumber }
+    public var name: String { device.name ?? device.nameOrAddress ?? "Headphones" }
 
     public func start() {
         guard !isClosed, channel == nil else { return }
@@ -118,7 +126,7 @@ public final class SoundcoreConnection: NSObject {
     /// Switches the ambient sound mode. The checkmark moves once the headphones acknowledge, and
     /// moves back if they then report that the switch did not stick.
     public func setMode(_ mode: AmbientSoundMode) {
-        guard case .ready(let current) = status, current != mode, let soundModes else { return }
+        guard case .ready(let current) = status, current != mode, let model, let soundModes else { return }
         let packet = model.setSoundModesPacket(switchingTo: mode, from: soundModes)
         log.info("\(self.name, privacy: .public): switching to \(mode.title, privacy: .public)")
         // Only the latest choice matters: drop a switch that is still waiting to be sent.
@@ -299,16 +307,9 @@ public final class SoundcoreConnection: NSObject {
     private func handle(_ packet: Packet) {
         switch packet.command {
         case .state:
-            if let modes = model.soundModes(inState: packet.body) {
-                apply(modes)
-                attempts = 0
-            } else {
-                log.error("\(self.name, privacy: .public): unexpected \(self.model.modelNumber, privacy: .public) state (\(packet.body.count) bytes): \(packet.body.hexString, privacy: .public)")
-                soundModes = nil
-                status = .unsupported("Unsupported firmware (state is \(packet.body.count) bytes)")
-            }
+            receivedState(packet.body)
         case .soundModesChanged:
-            if let soundModes, let updated = model.applyingChange(packet.body, to: soundModes) {
+            if let model, let soundModes, let updated = model.applyingChange(packet.body, to: soundModes) {
                 apply(updated)
                 endSettling(confirm: false)
             } else if soundModes != nil {
@@ -322,6 +323,31 @@ public final class SoundcoreConnection: NSObject {
         if packet.command == inFlight?.reply {
             finishInFlight(with: packet)
         }
+    }
+
+    private func receivedState(_ state: [UInt8]) {
+        if let model, let modes = model.soundModes(inState: state) {
+            apply(modes)
+            attempts = 0
+            return
+        }
+        let previous = model
+        model = HeadphoneModels.identify(state: state, deviceName: name, among: models)
+        if let model, let modes = model.soundModes(inState: state) {
+            log.info("\(self.name, privacy: .public): \(model.name, privacy: .public) (\(model.id, privacy: .public)\(model.verified ? "" : ", beta", privacy: .public))")
+            unrecognizedState = nil
+            apply(modes)
+            attempts = 0
+            return
+        }
+        // The reply holds the serial number, so only its length goes to the log.
+        log.notice("\(self.name, privacy: .public): state of \(state.count) bytes matches no known model; leaving these headphones alone")
+        unrecognizedState = state
+        soundModes = nil
+        status = .unsupported(previous == nil
+            ? "This model isn’t supported yet."
+            : "Unsupported firmware: the headphones’ settings have moved.")
+        tearDownChannel()
     }
 
     private func apply(_ modes: SoundModes?) {

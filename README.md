@@ -1,3 +1,5 @@
+<img src="docs/icon.png" width="112" alt="SoundcoreBar’s icon: a white rabbit wearing headphones">
+
 # SoundcoreBar
 
 Switch your Soundcore headphones between **Noise Cancelling**, **Transparency** and **Normal**
@@ -91,7 +93,7 @@ silicon. The Liquid Glass look needs macOS 26 or newer; older systems get regula
    the app as usual.
 3. When macOS asks whether SoundcoreBar may use Bluetooth, click **Allow**. It needs Bluetooth
    to talk to your headphones.
-4. Optional: add it under **System Settings › General › Login Items** to start it at login.
+4. Optional: turn on **Open at Login** in the panel to start it whenever you log in.
 
 If you clicked Don’t Allow, the panel says Bluetooth access is off and offers to open the
 settings page: turn SoundcoreBar on under Privacy & Security › Bluetooth and reopen the app.
@@ -104,8 +106,9 @@ Click the menu bar icon:
   headphones confirm the change.
 - Changes made on the headphones (the Q20i’s noise cancelling button, a long press on an R50i NC
   earbud) show up straight away.
-- **Menu Bar Icon** picks a symbol, an emoji or your own text. **Clear Glass** swaps the regular
-  Liquid Glass for the clearer variant.
+- **Menu Bar Icon** picks a symbol, an emoji or your own text. **Open at Login** starts
+  SoundcoreBar when you log in (you can also change this in System Settings › General › Login
+  Items). **Clear Glass** swaps the regular Liquid Glass for the clearer variant.
 
 Only one app on your Mac can control a pair at a time. If another one holds the headphones’
 controls (SoundcoreProbe, for instance), the pair shows as unavailable; SoundcoreBar retries every
@@ -130,6 +133,9 @@ macOS keeps the Bluetooth permission across rebuilds. To sign with your own cert
 
 To try the setup assistant on headphones SoundcoreBar already knows, start it with only the learned
 models: `open build/SoundcoreBar.app --args -SetUpKnownHeadphones YES`.
+
+The app icon is drawn by `scripts/make-icon.swift`; to redraw it:
+`swift scripts/make-icon.swift build/AppIcon.iconset && iconutil -c icns build/AppIcon.iconset -o Resources/AppIcon.icns`.
 
 There are no SwiftUI previews without Xcode, so `PanelPreview` stands in:
 

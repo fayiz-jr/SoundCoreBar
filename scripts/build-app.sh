@@ -30,6 +30,10 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$BIN_DIR/$PRODUCT" "$APP/Contents/MacOS/$PRODUCT"
 cp "$PLIST" "$APP/Contents/Info.plist"
+if [[ -f "$ROOT/Resources/AppIcon.icns" && "$PRODUCT" == "SoundcoreBar" ]]; then
+    mkdir -p "$APP/Contents/Resources"
+    cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+fi
 plutil -lint -s "$APP/Contents/Info.plist"
 
 if [[ "$SIGN_IDENTITY" == "-" ]]; then

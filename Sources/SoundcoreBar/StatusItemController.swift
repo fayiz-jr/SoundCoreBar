@@ -12,11 +12,12 @@ final class StatusItemController: NSObject {
     private let panel: GlassPanel
     private var defaultsObserver: NSObjectProtocol?
     private var shownIcon: MenuBarIcon?
+    private let loginItem = LoginItem()
 
     init(model: HeadphonesModel) {
         var closePanel: () -> Void = {}
         panel = GlassPanel(width: PanelView.width, content: AnyView(PanelContent(
-            model: model, state: PanelState(), closePanel: { closePanel() }
+            model: model, state: PanelState(), loginItem: loginItem, closePanel: { closePanel() }
         )))
         super.init()
         closePanel = { [weak self] in self?.panel.close() }
@@ -42,6 +43,8 @@ final class StatusItemController: NSObject {
         // This click already closed the panel on its way here; it should not open it again.
         guard Date().timeIntervalSince(panel.lastClosed) > 0.3 else { return }
         guard let button = statusItem.button, let window = button.window else { return }
+        // It may have been changed in System Settings since.
+        loginItem.refresh()
         panel.open(below: window.convertToScreen(button.convert(button.bounds, to: nil)))
         button.highlight(true)
     }
@@ -72,6 +75,7 @@ final class PanelState: ObservableObject {
 private struct PanelContent: View {
     @ObservedObject var model: HeadphonesModel
     @ObservedObject var state: PanelState
+    @ObservedObject var loginItem: LoginItem
     let closePanel: () -> Void
 
     var body: some View {
@@ -91,7 +95,10 @@ private struct PanelContent: View {
                     NSWorkspace.shared.open(url)
                 }
             },
-            onQuit: { NSApp.terminate(nil) }
+            onQuit: { NSApp.terminate(nil) },
+            opensAtLogin: loginItem.isEnabled,
+            loginItemNeedsApproval: loginItem.needsApproval,
+            onSetOpenAtLogin: { loginItem.set($0) }
         )
     }
 }

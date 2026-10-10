@@ -52,6 +52,9 @@ public struct PanelView: View {
     let onForget: (HeadphonesItem.ID) -> Void
     let onOpenBluetoothSettings: () -> Void
     let onQuit: () -> Void
+    let opensAtLogin: Bool
+    let loginItemNeedsApproval: Bool
+    let onSetOpenAtLogin: (Bool) -> Void
     @AppStorage(PanelPreferences.clearGlassKey) private var clearGlass = false
     let showsIconPicker: Binding<Bool>
 
@@ -64,7 +67,10 @@ public struct PanelView: View {
         onSetUp: @escaping (HeadphonesItem.ID) -> Void = { _ in },
         onForget: @escaping (HeadphonesItem.ID) -> Void = { _ in },
         onOpenBluetoothSettings: @escaping () -> Void,
-        onQuit: @escaping () -> Void
+        onQuit: @escaping () -> Void,
+        opensAtLogin: Bool = false,
+        loginItemNeedsApproval: Bool = false,
+        onSetOpenAtLogin: @escaping (Bool) -> Void = { _ in }
     ) {
         self.items = items
         self.bluetoothDenied = bluetoothDenied
@@ -75,6 +81,9 @@ public struct PanelView: View {
         self.onForget = onForget
         self.onOpenBluetoothSettings = onOpenBluetoothSettings
         self.onQuit = onQuit
+        self.opensAtLogin = opensAtLogin
+        self.loginItemNeedsApproval = loginItemNeedsApproval
+        self.onSetOpenAtLogin = onSetOpenAtLogin
     }
 
     public var body: some View {
@@ -102,10 +111,15 @@ public struct PanelView: View {
             }
             Divider()
             IconPicker(isExpanded: showsIconPicker)
+            SwitchRow(title: "Open at Login", isOn: Binding(get: { opensAtLogin }, set: { onSetOpenAtLogin($0) }))
+            if loginItemNeedsApproval {
+                Text("Switched off in System Settings › General › Login Items. Allow SoundcoreBar there to open it at login.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if #available(macOS 26, *) {
-                Toggle("Clear Glass", isOn: $clearGlass)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+                SwitchRow(title: "Clear Glass", isOn: $clearGlass)
             }
             Divider()
             Button(action: onQuit) {
@@ -134,6 +148,23 @@ public struct PanelView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Open Bluetooth Settings…", action: onOpenBluetoothSettings)
+        }
+    }
+}
+
+/// A setting with its switch at the trailing edge, in line with the icon picker's chevron.
+struct SwitchRow: View {
+    let title: String
+    let isOn: Binding<Bool>
+
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer(minLength: 8)
+            Toggle(title, isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
         }
     }
 }

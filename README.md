@@ -35,15 +35,19 @@ macOS will then ask once more, because the signature’s identity changed.
 
 With the app running and the headphones connected:
 
-1. Click the headphones icon. The menu shows the headphones’ name, then the three modes with a
-   checkmark on the current one. With both pairs connected, each gets its own section.
-2. Pick another mode. You hear the change, and the checkmark moves once the headphones confirm.
+1. Click the rabbit in the menu bar. The glass panel shows each connected pair's name and three
+   round buttons; the current mode is tinted with your accent colour. With both pairs connected,
+   each gets its own section.
+2. Click another mode. You hear the change, and the tint moves once the headphones confirm.
 3. Change the mode with the headphones (Q20i: the noise cancelling button; R50i NC: press and
-   hold an earbud). Open the menu again: the checkmark follows.
+   hold an earbud). The tint follows.
 4. Turn the headphones off or disconnect them in Bluetooth settings. Their section disappears;
-   with nothing connected the menu says “No Soundcore headphones connected” and the modes are
-   greyed out.
-5. Connect them again. They reappear about two seconds later with the right checkmark.
+   with nothing connected the panel says "No Soundcore headphones connected" and the buttons are
+   dimmed.
+5. Connect them again. They reappear about two seconds later with the right mode.
+6. Open **Menu Bar Icon** to pick a symbol, an emoji or your own text. The panel grows to fit and
+   scrolls if it would run off the screen. **Clear Glass** swaps the regular Liquid Glass for the
+   clearer variant.
 
 To watch what happens on the wire:
 
@@ -60,6 +64,15 @@ scripts/test.sh
 ```
 
 They use packets captured from both pairs and OpenSCQ30’s known-good set-sound-modes packets.
+
+## Panel preview
+
+There are no SwiftUI previews without Xcode, so `PanelPreview` stands in:
+
+```bash
+swift run PanelPreview build/preview   # PNGs of the panel's states, light and dark (layout only)
+swift run PanelPreview --live          # opens the real glass panel briefly and prints its geometry
+```
 
 ## Probe
 

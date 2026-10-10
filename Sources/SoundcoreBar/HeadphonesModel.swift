@@ -27,6 +27,10 @@ final class HeadphonesModel: ObservableObject {
         monitor.connections.first { $0.address == id }?.setMode(mode)
     }
 
+    func retry(_ id: HeadphonesItem.ID) {
+        monitor.connections.first { $0.address == id }?.retryNow()
+    }
+
     private func refresh() {
         items = monitor.connections.map { connection in
             HeadphonesItem(

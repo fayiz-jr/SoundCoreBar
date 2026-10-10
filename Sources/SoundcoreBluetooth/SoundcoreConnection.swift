@@ -28,7 +28,11 @@ public final class SoundcoreConnection: NSObject {
 
     /// OpenSCQ30 waits this long after each send before resending, then gives up.
     private static let resendWaits: [Duration] = [.milliseconds(500), .milliseconds(1000), .milliseconds(1500)]
-    private static let maxAttempts = 5
+    /// Quick retries right after connecting, then one every `slowRetryInterval`: another app (such
+    /// as Vorssaint) may hold the controls, and they free up when it quits.
+    private static let quickAttempts = 5
+    private static let slowRetryInterval: Duration = .seconds(30)
+    private static let unreachable = "Couldn’t connect. Another app may be using the headphones’ controls."
     private static let openTimeout: Duration = .seconds(10)
     /// How long a switch may take to settle. Earbuds pass a switch on to the other bud, then push
     /// "sound modes changed" (within about 1 s when measured on the R50i NC). Sending anything else
@@ -72,7 +76,8 @@ public final class SoundcoreConnection: NSObject {
     public func start() {
         guard !isClosed, channel == nil else { return }
         attempts += 1
-        status = .connecting
+        // A background retry keeps showing the failure until it succeeds.
+        if !isFailed { status = .connecting }
         if let service = SoundcoreServiceUUID.preferredService(in: device.rfcommServices) {
             open(service)
         } else if !awaitingSDP {
@@ -90,6 +95,21 @@ public final class SoundcoreConnection: NSObject {
         isClosed = true
         reopenTask?.cancel()
         tearDownChannel()
+    }
+
+    /// Starts over at once instead of waiting for the next background retry.
+    public func retryNow() {
+        guard !isClosed, isFailed else { return }
+        reopenTask?.cancel()
+        tearDownChannel()
+        attempts = 0
+        status = .connecting
+        start()
+    }
+
+    private var isFailed: Bool {
+        if case .failed = status { return true }
+        return false
     }
 
     /// Switches the ambient sound mode. The checkmark moves once the headphones acknowledge, and
@@ -165,16 +185,23 @@ public final class SoundcoreConnection: NSObject {
     private func scheduleReopen(reason: String) {
         tearDownChannel()
         guard !isClosed else { return }
-        guard device.isConnected(), attempts < Self.maxAttempts else {
-            log.error("\(self.name, privacy: .public): giving up: \(reason, privacy: .public)")
-            status = .failed("Couldn’t connect to the headphones")
-            return
+        // Gone headphones are dropped by the monitor when their disconnect notice arrives.
+        guard device.isConnected() else { status = .failed(Self.unreachable); return }
+        let wait: Duration
+        if attempts < Self.quickAttempts {
+            log.notice("\(self.name, privacy: .public): \(reason, privacy: .public); retrying")
+            if !isFailed { status = .connecting }
+            wait = .seconds(2)
+        } else {
+            if !isFailed {
+                log.error("\(self.name, privacy: .public): \(reason, privacy: .public); retrying every 30 s")
+            }
+            status = .failed(Self.unreachable)
+            wait = Self.slowRetryInterval
         }
-        log.notice("\(self.name, privacy: .public): \(reason, privacy: .public); retrying")
-        status = .connecting
         reopenTask?.cancel()
         reopenTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: wait)
             guard !Task.isCancelled else { return }
             self?.start()
         }

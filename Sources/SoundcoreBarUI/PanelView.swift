@@ -29,24 +29,26 @@ public struct PanelView: View {
     let items: [HeadphonesItem]
     let bluetoothDenied: Bool
     let onSelect: (HeadphonesItem.ID, AmbientSoundMode) -> Void
+    let onRetry: (HeadphonesItem.ID) -> Void
     let onOpenBluetoothSettings: () -> Void
     let onQuit: () -> Void
-    // `@State` is a compiler macro in the macOS 27 SDK and the Command Line Tools ship without its
-    // plugin, so view state is declared with the `State` type directly; SwiftUI treats it the same.
-    private let showsIconPicker: State<Bool>
+    @AppStorage(PanelPreferences.clearGlassKey) private var clearGlass = false
+    let showsIconPicker: Binding<Bool>
 
     public init(
         items: [HeadphonesItem],
         bluetoothDenied: Bool,
-        showsIconPicker: Bool = false,
+        showsIconPicker: Binding<Bool>,
         onSelect: @escaping (HeadphonesItem.ID, AmbientSoundMode) -> Void,
+        onRetry: @escaping (HeadphonesItem.ID) -> Void = { _ in },
         onOpenBluetoothSettings: @escaping () -> Void,
         onQuit: @escaping () -> Void
     ) {
         self.items = items
         self.bluetoothDenied = bluetoothDenied
-        self.showsIconPicker = State(initialValue: showsIconPicker)
+        self.showsIconPicker = showsIconPicker
         self.onSelect = onSelect
+        self.onRetry = onRetry
         self.onOpenBluetoothSettings = onOpenBluetoothSettings
         self.onQuit = onQuit
     }
@@ -65,11 +67,16 @@ public struct PanelView: View {
             } else {
                 ForEach(items) { item in
                     if item.id != items.first?.id { Divider() }
-                    HeadphonesSection(item: item) { onSelect(item.id, $0) }
+                    HeadphonesSection(item: item, onSelect: { onSelect(item.id, $0) }, onRetry: { onRetry(item.id) })
                 }
             }
             Divider()
-            IconPicker(isExpanded: showsIconPicker.projectedValue)
+            IconPicker(isExpanded: showsIconPicker)
+            if #available(macOS 26, *) {
+                Toggle("Clear Glass", isOn: $clearGlass)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+            }
             Divider()
             Button(action: onQuit) {
                 HStack {
@@ -82,9 +89,11 @@ public struct PanelView: View {
             .buttonStyle(.plain)
             .keyboardShortcut("q")
         }
-        .padding(16)
-        .frame(width: 300)
+        .padding(18)
+        .frame(width: PanelView.width)
     }
+
+    public static let width: CGFloat = 316
 
     private var bluetoothDeniedSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -102,6 +111,7 @@ public struct PanelView: View {
 struct HeadphonesSection: View {
     let item: HeadphonesItem
     let onSelect: (AmbientSoundMode) -> Void
+    let onRetry: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -124,9 +134,15 @@ struct HeadphonesSection: View {
                 ModeButtons(current: nil, onSelect: nil)
             case .problem(let message):
                 ModeButtons(current: nil, onSelect: nil)
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline) {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    Button("Try Again", action: onRetry)
+                        .controlSize(.small)
+                }
             }
         }
     }
@@ -141,21 +157,19 @@ struct ModeButtons: View {
         GlassGroup(spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 ForEach(AmbientSoundMode.allCases, id: \.self) { mode in
-                    VStack(spacing: 6) {
-                        Button { onSelect?(mode) } label: {
+                    VStack(spacing: 7) {
+                        GlassCircleButton(isSelected: mode == current, diameter: 50) {
+                            onSelect?(mode)
+                        } label: {
                             Image(systemName: mode.symbolName)
-                                .font(.system(size: 16, weight: .semibold))
-                                .frame(width: 30, height: 30)
+                                .font(.system(size: 18, weight: .semibold))
                         }
-                        .modifier(GlassCircleButtonStyle(isProminent: mode == current))
-                        .controlSize(.large)
-                        // The plain and tinted styles size themselves differently; a fixed frame
-                        // keeps the labels in line.
-                        .frame(width: 52, height: 52)
                         .disabled(onSelect == nil)
+                        .opacity(onSelect == nil ? 0.45 : 1)
                         .accessibilityLabel(mode.title)
+                        .accessibilityAddTraits(mode == current ? .isSelected : [])
                         Text(mode.title)
-                            .font(.caption)
+                            .font(.caption.weight(mode == current ? .semibold : .regular))
                             .foregroundStyle(mode == current ? .primary : .secondary)
                             .lineLimit(1)
                             .fixedSize()

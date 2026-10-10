@@ -46,13 +46,11 @@ struct IconPicker: View {
         GlassGroup(spacing: 6) {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 8) {
                 ForEach(choices, id: \.self) { choice in
-                    Button { iconRawValue = choice.rawValue } label: {
-                        choice.label
-                            .font(.system(size: 14))
-                            .frame(width: 22, height: 22)
+                    GlassCircleButton(isSelected: choice == icon, diameter: 36) {
+                        iconRawValue = choice.rawValue
+                    } label: {
+                        choice.label.font(.system(size: 15))
                     }
-                    .modifier(GlassCircleButtonStyle(isProminent: choice == icon))
-                    .frame(width: 38, height: 38)
                     .accessibilityLabel(choice.accessibilityName)
                 }
             }

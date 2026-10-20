@@ -38,6 +38,11 @@ public struct ModelLearner: Sendable {
 
     public private(set) var samples: [Sample] = []
     public private(set) var notices: [[UInt8]] = []
+    /// Messages of other kinds that arrived meanwhile, such as a newer model's own notices. Kept
+    /// for the report only.
+    public private(set) var otherMessages: [(command: Command, body: [UInt8])] = []
+    /// The most kept, so that a chatty pair of headphones can't make the report huge.
+    static let otherMessageLimit = 40
 
     public init() {}
 
@@ -47,6 +52,11 @@ public struct ModelLearner: Sendable {
 
     public mutating func record(notice: [UInt8]) {
         notices.append(notice)
+    }
+
+    public mutating func record(otherMessage command: Command, body: [UInt8]) {
+        guard otherMessages.count < Self.otherMessageLimit else { return }
+        otherMessages.append((command, body))
     }
 
     public var recordedModes: Set<AmbientSoundMode> { Set(samples.map(\.mode)) }
@@ -133,9 +143,13 @@ public struct ModelLearner: Sendable {
 
     /// The state with anything that could identify the headphones masked: the serial number and
     /// any other run of 8 or more letters and digits keep their first four characters, the rest
-    /// become "0".
+    /// become "0". In the newer tagged format (see `taggedValues`), every 6-byte value becomes
+    /// zeros too, since those hold Bluetooth addresses.
     public static func anonymised(_ state: [UInt8]) -> [UInt8] {
         var state = state
+        for value in taggedValues(in: state) ?? [] where value.count == 6 {
+            for index in value { state[index] = 0 }
+        }
         var serialRange = 0..<0
         if let serial = serialOffset(in: state) {
             serialRange = serial..<(serial + 16)
@@ -146,6 +160,21 @@ public struct ModelLearner: Sendable {
             for index in (run.lowerBound + 4)..<run.upperBound { state[index] = UInt8(ascii: "0") }
         }
         return state
+    }
+
+    /// Where the values are, if the reply is in the tagged format of newer models such as the
+    /// Liberty 5 Pro: [tag, length, value…] repeated to the very end. Nil for any other reply.
+    static func taggedValues(in bytes: [UInt8]) -> [Range<Int>]? {
+        var values: [Range<Int>] = []
+        var index = 0
+        while index + 2 <= bytes.count {
+            let end = index + 2 + Int(bytes[index + 1])
+            guard end <= bytes.count else { return nil }
+            values.append((index + 2)..<end)
+            index = end
+        }
+        // Ending exactly on an entry many times over doesn't happen by chance.
+        return index == bytes.count && values.count >= 10 ? values : nil
     }
 
     private static func isDigit(_ byte: UInt8) -> Bool { (0x30...0x39).contains(byte) }
@@ -173,7 +202,8 @@ public struct ModelLearner: Sendable {
     // MARK: Sharing
 
     /// A report for a GitHub issue, so the model can be added for everyone. Holds no serial number
-    /// or Bluetooth address; the Bluetooth name is the one thing to check before sharing.
+    /// or Bluetooth address (as far as they can be told apart); the Bluetooth name is the one thing
+    /// to check before sharing.
     public func report(deviceName: String, finding: Result<Finding, Problem>, testPassed: Bool?,
                        appVersion: String) -> String {
         var lines = [
@@ -197,6 +227,12 @@ public struct ModelLearner: Sendable {
         case .failure(let problem):
             lines.append("- Could not work out the layout: \(problem)")
         }
+        if samples.count > 1, Set(samples.map(\.state)).count == 1 {
+            lines.append("- The state replies were identical in every mode")
+        }
+        if let first = samples.first, Self.taggedValues(in: first.state) != nil {
+            lines.append("- The replies are in the newer tagged format; 6-byte values (Bluetooth addresses) are zeroed")
+        }
         lines += ["", "State replies (serial number masked):", "```"]
         for sample in samples {
             lines.append("\(sample.mode.title) (\(sample.state.count) bytes): \(Self.anonymised(sample.state).hexString)")
@@ -205,6 +241,11 @@ public struct ModelLearner: Sendable {
         if !notices.isEmpty {
             lines += ["", "Change notices from the headphones' button:", "```"]
             lines += notices.map(\.hexString)
+            lines.append("```")
+        }
+        if !otherMessages.isEmpty {
+            lines += ["", "Other messages from the headphones (command: body):", "```"]
+            lines += otherMessages.map { "\($0.command): \(Self.anonymised($0.body).hexString)" }
             lines.append("```")
         }
         return lines.joined(separator: "\n")

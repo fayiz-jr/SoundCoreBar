@@ -115,3 +115,58 @@ private func state(_ state: [UInt8], with block: [UInt8], at offset: Int) -> [UI
         #expect(report.contains("starting 3004"))
     }
 }
+
+/// Replies in the tagged format of newer models such as the Liberty 5 Pro, with made-up values.
+@Suite struct TaggedFormatTests {
+    static let address: [UInt8] = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC]
+
+    /// [tag, length, value…] entries: firmware, a serial number, a Bluetooth address and filler.
+    static let reply: [UInt8] = {
+        var entries: [[UInt8]] = [
+            [0x01, 0x01, 0x00], [0x02, 0x01, 0x01], [0x03, 0x02, 0x00, 0x60],
+            [0x05, 0x05] + Array("05.52".utf8),
+            [0x07, 0x11] + Array("1203AB12CD34EF56".utf8) + [0x00],
+            [0x29, 0x06] + address,
+        ]
+        for tag in UInt8(0x10)..<0x18 { entries.append([tag, 0x02, 0x0F, 0x0F]) }
+        return entries.flatMap { $0 }
+    }()
+
+    @Test func recognisesTaggedReplies() {
+        #expect(ModelLearner.taggedValues(in: Self.reply)?.count == 14)
+    }
+
+    @Test func olderRepliesAreNotTagged() {
+        #expect(ModelLearner.taggedValues(in: q20iState) == nil)
+        #expect(ModelLearner.taggedValues(in: r50iNCState()) == nil)
+        for fixture in openSCQ30Fixtures {
+            #expect(ModelLearner.taggedValues(in: fixture.state) == nil, "\(fixture.model)")
+        }
+    }
+
+    @Test func masksAddressesAndSerialNumbers() {
+        let masked = ModelLearner.anonymised(Self.reply)
+        #expect(!masked.hexString.contains(Self.address.hexString))
+        #expect(masked.hexString.contains(Array("1203000000000000".utf8).hexString))
+        #expect(masked.hexString.contains(Array("05.52".utf8).hexString))  // the firmware stays
+        #expect(masked.count == Self.reply.count)
+    }
+
+    @Test func reportsIdenticalRepliesAndOtherMessages() {
+        var learner = ModelLearner()
+        for mode in AmbientSoundMode.allCases { learner.record(state: Self.reply, as: mode) }
+        learner.record(otherMessage: Command(0x0A, 0x01), body: Self.reply)
+        let report = learner.report(deviceName: "soundcore Liberty 5 Pro", finding: learner.analyse(),
+                                    testPassed: nil, appVersion: "1.2.1")
+        #expect(report.contains("identical in every mode"))
+        #expect(report.contains("tagged format"))
+        #expect(report.contains("Other messages"))
+        #expect(!report.contains(Self.address.hexString))
+    }
+
+    @Test func keepsAtMostTheLimitOfOtherMessages() {
+        var learner = ModelLearner()
+        for _ in 0..<100 { learner.record(otherMessage: Command(0x0A, 0x01), body: [1]) }
+        #expect(learner.otherMessages.count == ModelLearner.otherMessageLimit)
+    }
+}

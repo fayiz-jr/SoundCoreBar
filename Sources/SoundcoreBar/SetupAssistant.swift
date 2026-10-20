@@ -125,8 +125,16 @@ final class SetupAssistant: ObservableObject {
             default:
                 break
             }
+        case .setSoundModes:
+            break  // the acknowledgement of a test switch
         default:
-            break
+            // Unknown messages, perhaps a newer model's notices: kept for the report.
+            switch state.step {
+            case .connecting, .record, .reading:
+                learner.record(otherMessage: packet.command, body: packet.body)
+            default:
+                break
+            }
         }
     }
 

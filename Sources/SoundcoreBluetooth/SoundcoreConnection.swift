@@ -341,9 +341,8 @@ public final class SoundcoreConnection: NSObject {
 
     private func handle(_ packet: Packet) {
         if isLearning {
-            if packet.command == .state || packet.command == .soundModesChanged {
-                onLearningPacket?(packet)
-            }
+            // Everything, so that unknown models' own messages end up in the setup report.
+            onLearningPacket?(packet)
             if packet.command == .soundModesChanged { endSettling(confirm: false) }
             if packet.command == inFlight?.reply { finishInFlight(with: packet) }
             return

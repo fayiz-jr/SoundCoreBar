@@ -299,8 +299,9 @@ public final class SoundcoreConnection: NSObject {
         guard settleTask != nil else { return }
         settleTask?.cancel()
         settleTask = nil
-        // The setup assistant reads the state itself.
-        if confirm, !isLearning {
+        // The setup assistant reads the state itself, and some models' state doesn't follow
+        // switches (their notices are trusted instead).
+        if confirm, !isLearning, model?.stateFollowsChanges ?? true {
             requestState()
         } else {
             sendNextRequest()
@@ -353,6 +354,9 @@ public final class SoundcoreConnection: NSObject {
         case .soundModesChanged:
             if let model, let soundModes, let updated = model.applyingChange(packet.body, to: soundModes) {
                 apply(updated)
+                endSettling(confirm: false)
+            } else if soundModes != nil, model?.stateFollowsChanges == false {
+                log.notice("\(self.name, privacy: .public): unexpected change push \(packet.body.hexString, privacy: .public); ignored")
                 endSettling(confirm: false)
             } else if soundModes != nil {
                 log.notice("\(self.name, privacy: .public): unexpected change push \(packet.body.hexString, privacy: .public); re-reading state")

@@ -33,10 +33,19 @@ public struct HeadphoneModel: Codable, Hashable, Sendable, Identifiable {
     public var extraModes: [UInt8]
     /// Tested on real headphones of this model. The others are shown as Beta.
     public var verified: Bool
+    /// For replies in the tagged format (`TaggedState`): the entries whose values, one after the
+    /// other, make up the sound-modes block, and the entry holding the serial number. The offsets
+    /// above are then unused.
+    public var soundModesTags: [UInt8]?
+    public var serialTag: UInt8?
+    /// False for models whose state reply doesn't follow mode changes while connected (the
+    /// Liberty 5 Pro): their mode is followed through change notices alone, never re-read.
+    public var stateUpdatesLive: Bool?
 
     public init(modelNumbers: [String], name: String, nameKeywords: [String], formFactor: FormFactor,
                 serialOffset: Int?, soundModesOffset: Int, soundModesLength: Int, pushCarriesBlock: Bool,
-                extraModes: [UInt8] = [], verified: Bool = false) {
+                extraModes: [UInt8] = [], verified: Bool = false, soundModesTags: [UInt8]? = nil,
+                serialTag: UInt8? = nil, stateUpdatesLive: Bool? = nil) {
         self.modelNumbers = modelNumbers
         self.name = name
         self.nameKeywords = nameKeywords
@@ -47,7 +56,13 @@ public struct HeadphoneModel: Codable, Hashable, Sendable, Identifiable {
         self.pushCarriesBlock = pushCarriesBlock
         self.extraModes = extraModes
         self.verified = verified
+        self.soundModesTags = soundModesTags
+        self.serialTag = serialTag
+        self.stateUpdatesLive = stateUpdatesLive
     }
+
+    /// Whether reading the state again confirms a switch.
+    public var stateFollowsChanges: Bool { stateUpdatesLive ?? true }
 
     public var id: String { modelNumbers.isEmpty ? name : modelNumbers.joined(separator: "/") }
 
@@ -56,6 +71,10 @@ public struct HeadphoneModel: Codable, Hashable, Sendable, Identifiable {
     /// Whether a state reply's serial number is one of this model's, or nil if the model's replies
     /// carry none.
     public func serialMatches(_ state: [UInt8]) -> Bool? {
+        if let serialTag {
+            guard let serial = TaggedState.value(serialTag, in: state), serial.count >= 4 else { return false }
+            return modelNumbers.contains { $0.drop(while: \.isLetter).prefix(4) == String(decoding: serial.prefix(4), as: UTF8.self) }
+        }
         guard let serialOffset else { return nil }
         guard state.count >= serialOffset + 4 else { return false }
         let prefix = String(decoding: state[serialOffset..<(serialOffset + 4)], as: UTF8.self)
@@ -71,6 +90,14 @@ public struct HeadphoneModel: Codable, Hashable, Sendable, Identifiable {
     /// The sound-modes block in a state reply, or nil if the reply is not in this model's layout.
     /// Firmware updates can add bytes at the end, so longer replies are accepted.
     public func soundModes(inState state: [UInt8]) -> SoundModes? {
+        if let soundModesTags {
+            guard serialMatches(state) != false else { return nil }
+            let values = soundModesTags.map { TaggedState.value($0, in: state) }
+            guard values.allSatisfy({ $0 != nil }) else { return nil }
+            let block = values.flatMap { $0! }
+            guard block.count == soundModesLength else { return nil }
+            return SoundModes(block, extraModes: Set(extraModes))
+        }
         guard state.count >= soundModesRange.upperBound, serialMatches(state) != false,
               let modes = SoundModes(Array(state[soundModesRange]), extraModes: Set(extraModes))
         else { return nil }
@@ -131,7 +158,8 @@ public enum HeadphoneModels {
                                 among models: [HeadphoneModel] = builtIn) -> HeadphoneModel? {
         models.first { $0.serialMatches(state) == true && $0.soundModes(inState: state) != nil }
             ?? models.first {
-                $0.serialOffset == nil && $0.matches(deviceName: deviceName) && $0.soundModes(inState: state) != nil
+                $0.serialOffset == nil && $0.serialTag == nil && $0.matches(deviceName: deviceName)
+                    && $0.soundModes(inState: state) != nil
             }
     }
 

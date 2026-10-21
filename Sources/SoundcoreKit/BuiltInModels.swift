@@ -109,5 +109,15 @@ extension HeadphoneModels {
             modelNumbers: ["D1202"], name: "P31i / R60i NC", nameKeywords: ["P31i", "R60i"], formFactor: .earbuds,
             serialOffset: 16, soundModesOffset: 119, soundModesLength: 8, pushCarriesBlock: true
         ),
+
+        // Earbuds, tagged format. Not in OpenSCQ30; worked out from reports in SoundcoreBar issue #1.
+        HeadphoneModel(
+            // Serial numbers start 1203. The block is entries 24, 25 and 26: [mode, 00, 00, 05, 01,
+            // 00, 00], the same 7 bytes as its change notices. Its state reply kept reporting the
+            // mode it connected in while the notices showed every switch, so it is never re-read.
+            modelNumbers: ["1203"], name: "Liberty 5 Pro", nameKeywords: ["Liberty 5 Pro"], formFactor: .earbuds,
+            serialOffset: nil, soundModesOffset: 0, soundModesLength: 7, pushCarriesBlock: true,
+            soundModesTags: [0x24, 0x25, 0x26], serialTag: 0x07, stateUpdatesLive: false
+        ),
     ]
 }

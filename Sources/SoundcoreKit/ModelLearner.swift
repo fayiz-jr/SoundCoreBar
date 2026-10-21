@@ -165,16 +165,7 @@ public struct ModelLearner: Sendable {
     /// Where the values are, if the reply is in the tagged format of newer models such as the
     /// Liberty 5 Pro: [tag, length, value…] repeated to the very end. Nil for any other reply.
     static func taggedValues(in bytes: [UInt8]) -> [Range<Int>]? {
-        var values: [Range<Int>] = []
-        var index = 0
-        while index + 2 <= bytes.count {
-            let end = index + 2 + Int(bytes[index + 1])
-            guard end <= bytes.count else { return nil }
-            values.append((index + 2)..<end)
-            index = end
-        }
-        // Ending exactly on an entry many times over doesn't happen by chance.
-        return index == bytes.count && values.count >= 10 ? values : nil
+        TaggedState.entries(in: bytes)?.map(\.value)
     }
 
     private static func isDigit(_ byte: UInt8) -> Bool { (0x30...0x39).contains(byte) }

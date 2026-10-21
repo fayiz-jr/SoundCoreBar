@@ -164,10 +164,10 @@ import Testing
         #expect(Array(packet.body.dropFirst()) == Array(modes.bytes.dropFirst()))
     }
 
-    /// The Q20i is covered by our own capture above. OpenSCQ30 has no packet for the Life Q35 or
-    /// the Vortex: their offsets come from its parsers only.
+    /// The Q20i and the Liberty 5 Pro are covered by captures of their own. OpenSCQ30 has no packet
+    /// for the Life Q35 or the Vortex: their offsets come from its parsers only.
     @Test func coversEveryBuiltInModel() {
-        let withoutFixture: Set = ["A3004", "A3027/A3030", "A3031"]
+        let withoutFixture: Set = ["A3004", "A3027/A3030", "A3031", "1203"]
         for model in HeadphoneModels.builtIn where !withoutFixture.contains(model.id) {
             #expect(model.modelNumbers.contains { number in openSCQ30Fixtures.contains { $0.model == number } },
                     "\(model.id) has no fixture")
@@ -208,5 +208,44 @@ import Testing
         #expect(SoundModes([0x03, 0x00]) == nil)
         #expect(SoundModes([0x03, 0x00], extraModes: [3])?.ambient == nil)
         #expect(SoundModes([0x01])?.ambient == .transparency)
+    }
+}
+
+@Suite struct Liberty5ProTests {
+    let model = builtIn("1203")
+
+    @Test func recognisedBySerialNumberInTaggedReply() {
+        #expect(liberty5ProState.count == 371)
+        #expect(HeadphoneModels.identify(state: liberty5ProState, deviceName: "Headphones")?.name == "Liberty 5 Pro")
+        // The Liberty 5 (no Pro) is still told apart by its serial number.
+        let liberty5 = openSCQ30Fixtures.first { $0.model == "A3957" }!
+        #expect(HeadphoneModels.identify(state: liberty5.state, deviceName: "soundcore Liberty 5 Pro")?.id == "A3957")
+    }
+
+    @Test func readsTheBlockFromItsThreeEntries() {
+        let modes = model.soundModes(inState: liberty5ProState)
+        #expect(modes?.bytes == hex("02 00 00 05 01 00 00"))
+        #expect(modes?.ambient == .normal)
+    }
+
+    @Test func findsEntriesWhenFirmwareChangesTheirPositions() {
+        // Firmware 05.33 has a 3-byte entry 1b where 05.52 has 4 bytes, moving everything after it.
+        var state = liberty5ProState
+        let entry1b = TaggedState.entries(in: state)!.first { $0.tag == 0x1B }!
+        state[entry1b.value.lowerBound - 1] = 3
+        state.remove(at: entry1b.value.upperBound - 1)
+        #expect(model.soundModes(inState: state)?.ambient == .normal)
+    }
+
+    @Test func followsItsButtonNoticesAndSwitchesWithTheSameBlock() throws {
+        var modes = try #require(model.soundModes(inState: liberty5ProState))
+        modes = try #require(model.applyingChange(hex("00 00 00 05 01 00 00"), to: modes))
+        #expect(modes.ambient == .noiseCanceling)
+        #expect(model.setSoundModesPacket(switchingTo: .transparency, from: modes).body == hex("01 00 00 05 01 00 00"))
+    }
+
+    @Test func itsStateIsNeverTrustedToFollowSwitches() {
+        #expect(!model.stateFollowsChanges)
+        #expect(HeadphoneModels.builtIn.filter { !$0.stateFollowsChanges }.map(\.name) == ["Liberty 5 Pro"])
     }
 }

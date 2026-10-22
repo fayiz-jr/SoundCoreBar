@@ -152,6 +152,10 @@ To watch the packets while you use the app:
 /usr/bin/log stream --level debug --predicate 'subsystem == "com.fayizjr.SoundcoreBar"'
 ```
 
+This prints every message exactly as the headphones send it, including their serial number and,
+on newer models, Bluetooth addresses. Before sharing it, keep only the lines you need: switches and
+mode changes are the ones containing `06 81` and `06 01`.
+
 ## Adding your headphones
 
 If SoundcoreBar doesn’t know your Soundcore headphones, the panel shows **Set Up…** next to them.

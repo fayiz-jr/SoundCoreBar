@@ -39,6 +39,7 @@ Tested with SoundcoreBar:
 | --- | --- | --- |
 | Soundcore Q20i (over-ear) | A3004 | 00.26 |
 | Soundcore R50i NC / P30i (earbuds) | A3959 | 01.65 |
+| Soundcore Liberty 5 Pro (earbuds), tested by an owner in [#1](../../issues/1) | serial 1203… | 05.52 |
 
 **Beta.** These follow the layouts worked out by [OpenSCQ30](https://github.com/Oppzippy/OpenSCQ30)
 and pass tests built from real packets of each model, but have not been tried with SoundcoreBar
@@ -58,7 +59,6 @@ yet, so the panel marks them Beta. If you have one, please
 | Liberty 4 NC | A3947 |
 | Liberty 4 Pro (airplane mode shows as no mode) | A3954 |
 | Liberty 5 | A3957 |
-| Liberty 5 Pro (from 1.3, being tested in [#1](../../issues/1)) | serial 1203… |
 | Life Dot 2 NC, Life A2 NC | A3931, A3935 |
 | Life Note 3, Life P3 | A3933, A3939 |
 | P31i, R60i NC | D1202 |

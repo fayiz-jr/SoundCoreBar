@@ -182,7 +182,7 @@ import Testing
     }
 
     @Test func onlyTestedModelsAreVerified() {
-        #expect(HeadphoneModels.builtIn.filter(\.verified).map(\.id) == ["A3004", "A3959"])
+        #expect(HeadphoneModels.builtIn.filter(\.verified).map(\.id) == ["A3004", "A3959", "1203"])
     }
 
     @Test func airplaneModeIsShownAsNoMode() throws {
